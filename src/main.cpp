@@ -22,16 +22,16 @@ using f64 = double;
 
 #define UNUSED_VAR(x) (void)x
 
-enum printf_flags
+enum Print_Flags
 {
 	NONE = 0,
 	APPEND_NEWLINE = 0x1,
 };
 
 // NOTE(): Returned pointer must be deleted by caller.
-char const* inplace_printf(char const* fmt, printf_flags flags, va_list args)
+char const* inplace_printf(char const* fmt, Print_Flags flags, va_list args)
 {
-	bool append_newline = flags & printf_flags::APPEND_NEWLINE;
+	bool append_newline = flags & Print_Flags::APPEND_NEWLINE;
 
 	va_list args_copy;
 	va_copy(args_copy, args);
@@ -55,7 +55,7 @@ char const* inplace_printf(char const* fmt, printf_flags flags, va_list args)
 	return msg_buffer;
 }
 
-char const* va_inplace_printf(char const* fmt, printf_flags flags, ...)
+char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...)
 {
 	va_list args;
 	va_start(args, flags);
@@ -69,10 +69,10 @@ bool handle_assert(char const* condition, char const* msg, ...)
 {
 	va_list user_args;
 	va_start(user_args, msg);
-	char const* user_msg = inplace_printf(msg, printf_flags::NONE, user_args);
+	char const* user_msg = inplace_printf(msg, Print_Flags::NONE, user_args);
 	va_end(user_args);
 
-	char const* assert_msg = va_inplace_printf("Condition: %s\nMessage: %s", printf_flags::APPEND_NEWLINE, condition, user_msg);
+	char const* assert_msg = va_inplace_printf("Condition: %s\nMessage: %s", Print_Flags::APPEND_NEWLINE, condition, user_msg);
 
 	bool should_break = (IDYES == MessageBoxA(NULL, assert_msg, "Assert Failed! Break into code?", MB_YESNO | MB_ICONERROR));
 
@@ -86,14 +86,14 @@ bool handle_assert(char const* condition, char const* msg, ...)
 			if (handle_assert( #condition , msg, __VA_ARGS__)) \
 				__debugbreak();								   \
 
-void log_message(char const* fmt, ...) // TODO: append newline
+void log_message(char const* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
 	
 	// TODO: we dont want to allocate on every log, so reserve a logging buffer instead.
 	// will need to update inplace_printf to handle truncation (if not write to end of write, cant assume full buffer is used)
-	char const* msg = inplace_printf(fmt, printf_flags::APPEND_NEWLINE, args);
+	char const* msg = inplace_printf(fmt, Print_Flags::APPEND_NEWLINE, args);
 	OutputDebugStringA(msg);
 
 	delete msg;
@@ -135,19 +135,38 @@ void log_last_windows_error()
 
 static LRESULT CALLBACK OnMainWindowEvent(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	return DefWindowProc(handle, message, wParam, lParam);
+	switch (message)
+	{
+	case WM_CREATE:
+	{
+		LPCREATESTRUCT createStruct = reinterpret_cast<LPCREATESTRUCT>(lParam);
+		SetWindowLongPtr(handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
+		break;
+	}
+
+	case WM_CLOSE:
+	{
+		PostQuitMessage(0);
+		break;
+	}
+	}
+
+	return DefWindowProcW(handle, message, wParam, lParam);
 }
 
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
 {
+    HANDLE main_window_handle = INVALID_HANDLE_VALUE;
+    WCHAR const* window_class_name = L"editor_window_class";
+    u32 window_width = 800;
+    u32 window_height = 800;
+    
     {
 		ATOM class_handle = INVALID_ATOM;
-		WCHAR const* window_class_name = L"editor_window_class";
-
+		
 		{
-			WNDCLASSEX window_class;
-			memset(&window_class, 0, sizeof(WNDCLASSEX));
-			window_class.cbSize = sizeof(WNDCLASSEX);
+			WNDCLASSEX window_class = {};
+	    	window_class.cbSize = sizeof(WNDCLASSEX);
 			window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
 			window_class.lpfnWndProc = &OnMainWindowEvent;
 			window_class.hInstance = GetModuleHandle(nullptr);
@@ -155,19 +174,76 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 
 			class_handle = RegisterClassEx(&window_class);
 			
-			ASSERT(class_handle != INVALID_ATOM, "Failed to register window class type %ls!\n", window_class_name);
+			ASSERT(class_handle != INVALID_ATOM, "Failed to register window class type %ls!", window_class_name);
 
 		}
 		
 		if (class_handle == INVALID_ATOM)
 		{
 			log_last_windows_error();
+            return -1;
 		}
 
+        RECT window_dim = {};
+		window_dim.left = 50;
+		window_dim.top = 50;
+        window_dim.bottom = 50 + window_height;
+        window_dim.right = 50 + window_width;
+
+        DWORD ex_window_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+        DWORD window_style = WS_OVERLAPPEDWINDOW;
+        
+        BOOL has_menu = FALSE;
+        AdjustWindowRect(&window_dim, WS_OVERLAPPEDWINDOW, has_menu);
+
+		WCHAR const* window_title = L"Editor";
+
+        main_window_handle = CreateWindowEx(ex_window_style,
+                                            window_class_name,
+                                            window_title,
+                                            WS_CLIPSIBLINGS | WS_CLIPCHILDREN | window_style,
+                                            window_dim.left,
+                                            window_dim.top,
+                                            window_dim.right - window_dim.left,
+                                            window_dim.bottom - window_dim.top,
+                                            nullptr,
+                                            nullptr,
+                                            GetModuleHandle(nullptr),
+                                            nullptr);
+
+        ASSERT(main_window_handle != INVALID_HANDLE_VALUE, "Failed to create main window!");
+        
+        if (main_window_handle == INVALID_HANDLE_VALUE)
+        {
+            log_last_windows_error();
+            return -1;
+        }
+
+        ShowWindow((HWND)main_window_handle, SW_SHOW);
+		SetForegroundWindow((HWND)main_window_handle);
+
+		UpdateWindow((HWND)main_window_handle);
     }
 
-    u32 window_width = 800;
-    u32 window_height = 600;
+	LOG("Hello Editor");
 
-	LOG("Hello Editor"); // TODO(why do we end up using a double new-line to get the right output?
+	bool exit_app = false;
+
+    MSG msg = {};
+	while (!exit_app)
+	{
+		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+		{
+			if (WM_QUIT == msg.message)
+			{
+				exit_app = true;
+			}
+
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+
+    UnregisterClass(window_class_name, GetModuleHandle(nullptr));
+	return 0;
 }

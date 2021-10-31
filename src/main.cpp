@@ -2,12 +2,9 @@
 #include "stdint.h"
 #include "stdlib.h"
 
-#ifndef NOMINMAX 
-#define NOMINMAX 
-#endif  
-
-#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+
+#include "volk/volk.h"
 
 using s8  =  int8_t;
 using u8  = uint8_t;
@@ -67,12 +64,24 @@ char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...)
 
 bool handle_assert(char const* condition, char const* msg, ...)
 {
-	va_list user_args;
-	va_start(user_args, msg);
-	char const* user_msg = inplace_printf(msg, Print_Flags::NONE, user_args);
-	va_end(user_args);
-
-	char const* assert_msg = va_inplace_printf("Condition: %s\nMessage: %s", Print_Flags::APPEND_NEWLINE, condition, user_msg);
+	char const* user_msg = nullptr;
+	if (msg)
+	{
+		va_list user_args;
+		va_start(user_args, msg);
+		user_msg = inplace_printf(msg, Print_Flags::NONE, user_args);
+		va_end(user_args);
+	}
+	
+	char const* assert_msg = nullptr;
+	if (user_msg)
+	{
+		assert_msg = va_inplace_printf("Condition: %s\nMessage: %s", Print_Flags::APPEND_NEWLINE, condition, user_msg);
+	}
+	else
+	{
+		assert_msg = va_inplace_printf("Condition: %s", Print_Flags::APPEND_NEWLINE, condition);
+	}
 
 	bool should_break = (IDYES == MessageBoxA(NULL, assert_msg, "Assert Failed! Break into code?", MB_YESNO | MB_ICONERROR));
 
@@ -82,9 +91,13 @@ bool handle_assert(char const* condition, char const* msg, ...)
 	return should_break;
 }
 
-#define ASSERT(condition, msg, ...) if ((condition) == false)  \
+#define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
 			if (handle_assert( #condition , msg, __VA_ARGS__)) \
 				__debugbreak();								   \
+
+#define ASSERT(condition) if ((condition) == false)   \
+			if (handle_assert( #condition, nullptr )) \
+				__debugbreak();						  \
 
 void log_message(char const* fmt, ...)
 {
@@ -154,81 +167,111 @@ static LRESULT CALLBACK OnMainWindowEvent(HWND handle, UINT message, WPARAM wPar
 	return DefWindowProcW(handle, message, wParam, lParam);
 }
 
-INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
+struct Create_Window_Params
 {
-    HANDLE main_window_handle = INVALID_HANDLE_VALUE;
-    WCHAR const* window_class_name = L"editor_window_class";
-    u32 window_width = 800;
-    u32 window_height = 800;
-    
+    u32 x;
+    u32 y;
+    u32 width;
+    u32 height;
+    WCHAR const* class_name;
+    WCHAR const* title;
+};
+
+static HWND create_window(Create_Window_Params* params)
+{
+    WNDCLASSEX window_class = {};
+    window_class.cbSize = sizeof(WNDCLASSEX);
+    window_class.style =  CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    window_class.lpfnWndProc =   &OnMainWindowEvent;
+    window_class.hInstance =     GetModuleHandle(nullptr);
+    window_class.lpszClassName = params->class_name;
+
+    ATOM class_handle = RegisterClassEx(&window_class);
+    ASSERT_MSG(class_handle != INVALID_ATOM, "Failed to register window class type %ls!", params->class_name);
+
+    if (class_handle == INVALID_ATOM)
     {
-		ATOM class_handle = INVALID_ATOM;
-		
-		{
-			WNDCLASSEX window_class = {};
-	    	window_class.cbSize = sizeof(WNDCLASSEX);
-			window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-			window_class.lpfnWndProc = &OnMainWindowEvent;
-			window_class.hInstance = GetModuleHandle(nullptr);
-			window_class.lpszClassName = window_class_name;
-
-			class_handle = RegisterClassEx(&window_class);
-			
-			ASSERT(class_handle != INVALID_ATOM, "Failed to register window class type %ls!", window_class_name);
-
-		}
-		
-		if (class_handle == INVALID_ATOM)
-		{
-			log_last_windows_error();
-            return -1;
-		}
-
-        RECT window_dim = {};
-		window_dim.left = 50;
-		window_dim.top = 50;
-        window_dim.bottom = 50 + window_height;
-        window_dim.right = 50 + window_width;
-
-        DWORD ex_window_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-        DWORD window_style = WS_OVERLAPPEDWINDOW;
-        
-        BOOL has_menu = FALSE;
-        AdjustWindowRect(&window_dim, WS_OVERLAPPEDWINDOW, has_menu);
-
-		WCHAR const* window_title = L"Editor";
-
-        main_window_handle = CreateWindowEx(ex_window_style,
-                                            window_class_name,
-                                            window_title,
-                                            WS_CLIPSIBLINGS | WS_CLIPCHILDREN | window_style,
-                                            window_dim.left,
-                                            window_dim.top,
-                                            window_dim.right - window_dim.left,
-                                            window_dim.bottom - window_dim.top,
-                                            nullptr,
-                                            nullptr,
-                                            GetModuleHandle(nullptr),
-                                            nullptr);
-
-        ASSERT(main_window_handle != INVALID_HANDLE_VALUE, "Failed to create main window!");
-        
-        if (main_window_handle == INVALID_HANDLE_VALUE)
-        {
-            log_last_windows_error();
-            return -1;
-        }
-
-        ShowWindow((HWND)main_window_handle, SW_SHOW);
-		SetForegroundWindow((HWND)main_window_handle);
-
-		UpdateWindow((HWND)main_window_handle);
+        log_last_windows_error();
+        return (HWND)INVALID_HANDLE_VALUE;
     }
 
-	LOG("Hello Editor");
+    RECT window_dim = {};
+    window_dim.left = params->x;
+    window_dim.top =  params->y;
+    window_dim.bottom = params->y + params->height;
+    window_dim.right =  params->x + params->width;
 
-	bool exit_app = false;
+    DWORD ex_window_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+    DWORD window_style = WS_OVERLAPPEDWINDOW;
 
+    BOOL has_menu = FALSE;
+    AdjustWindowRect(&window_dim, WS_OVERLAPPEDWINDOW, has_menu);
+
+    WCHAR const* window_title = L"Editor";
+
+    HANDLE window_handle = CreateWindowEx(
+                            ex_window_style,
+                            params->class_name,
+                            params->title,
+                            WS_CLIPSIBLINGS | WS_CLIPCHILDREN | window_style,
+                            window_dim.left,
+                            window_dim.top,
+                            window_dim.right - window_dim.left,
+                            window_dim.bottom - window_dim.top,
+                            nullptr,
+                            nullptr,
+                            GetModuleHandle(nullptr),
+                            nullptr);
+
+    if (window_handle != INVALID_HANDLE_VALUE)
+    {
+        LOG("Created new window TITLE: %ls X: %ld Y: %ld WIDTH: %ld HEIGHT: %ld", params->title, window_dim.left, window_dim.top, 
+            window_dim.right - window_dim.left, window_dim.bottom - window_dim.top);
+    }
+    else
+    {
+        log_last_windows_error();
+        ASSERT_MSG(window_handle != INVALID_HANDLE_VALUE, "Failed to create main window!");
+    }
+
+    return (HWND)window_handle;
+}
+
+static void close_window(HWND handle, Create_Window_Params* params)
+{
+    UnregisterClass(params->class_name, GetModuleHandle(nullptr));
+}
+
+#define VK_CHECK(op) \
+	do { \
+		VkResult result = op; \
+		ASSERT(result == VK_SUCCESS); \
+	} while (false)
+
+INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
+{
+    Create_Window_Params window_params = {};
+    window_params.x = 50;
+    window_params.y = 50;
+    window_params.width  = 800;
+    window_params.height = 800;
+    window_params.class_name = L"editor_window_class";
+    window_params.title = L"Editor";
+
+    HWND main_window_handle = create_window(&window_params);
+        
+    if (main_window_handle == INVALID_HANDLE_VALUE)
+    {
+        return -1;
+    }
+
+    ShowWindow((HWND)main_window_handle, SW_SHOW);
+    SetForegroundWindow((HWND)main_window_handle);
+    UpdateWindow((HWND)main_window_handle);
+
+	VK_CHECK(volkInitialize());
+
+	bool exit_app = false;    
     MSG msg = {};
 	while (!exit_app)
 	{
@@ -244,6 +287,6 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 		}
 	}
 
-    UnregisterClass(window_class_name, GetModuleHandle(nullptr));
+    close_window(main_window_handle, &window_params);
 	return 0;
 }

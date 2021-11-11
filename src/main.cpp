@@ -248,8 +248,22 @@ static void close_window(HWND handle, Create_Window_Params* params)
 		ASSERT(result == VK_SUCCESS); \
 	} while (false)
 
+static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type, 
+	u64 object, size_t location, s32 message_code, char const* layer_prefix, char const* message, void* user_data)
+{
+	bool is_error = flags & VK_DEBUG_REPORT_ERROR_BIT_EXT;
+
+	LOG("[VK] SEV: %s LAYER: %s MSG: %s", is_error ? "ERROR" : "WARNING", message);
+
+	ASSERT(!is_error);
+
+	return VK_FALSE; // Spec states users should always return false here.
+}
+
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
 {
+	VK_CHECK(volkInitialize());
+
     Create_Window_Params window_params = {};
     window_params.x = 50;
     window_params.y = 50;
@@ -269,7 +283,34 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
     SetForegroundWindow((HWND)main_window_handle);
     UpdateWindow((HWND)main_window_handle);
 
-	VK_CHECK(volkInitialize());
+	// Create vkInstance
+	{
+		
+	}
+
+
+	{
+		VkDebugReportCallbackCreateInfoEXT create_info = { VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT };
+		create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+		create_info.pfnCallback = debug_report_callback;
+
+		VkDebugReportCallbackEXT callback = {};
+		VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &create_info, nullptr, &callback));
+	}
+
+	//volkLoadInstanceOnly(vk_instance);
+
+	// Create vkDevice
+
+	/*{
+		VkDeviceQueueCreateInfo queue_info = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+		queue_info.queueFamilyIndex =
+
+			VkDeviceCreateInfo create_info = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+
+	}
+
+	volkLoadDevice(vk_device);*/
 
 	bool exit_app = false;    
     MSG msg = {};

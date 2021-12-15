@@ -19,6 +19,12 @@ using f64 = double;
 
 #define UNUSED_VAR(x) (void)x
 
+#ifdef _DEBUG
+    #define DEBUG_BUILD 1
+#else
+    #define DEBUG_BUILD 0
+#endif
+
 enum Print_Flags
 {
 	NONE = 0,
@@ -245,7 +251,7 @@ static void close_window(HWND handle, Create_Window_Params* params)
 #define VK_CHECK(op) \
 	do { \
 		VkResult result = op; \
-		ASSERT(result == VK_SUCCESS); \
+		ASSERT_MSG(result == VK_SUCCESS, "Error code: %d", result); \
 	} while (false)
 
 static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type, 
@@ -253,7 +259,7 @@ static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, Vk
 {
 	bool is_error = flags & VK_DEBUG_REPORT_ERROR_BIT_EXT;
 
-	LOG("[VK] SEV: %s LAYER: %s MSG: %s", is_error ? "ERROR" : "WARNING", message);
+	LOG("[VK] SEV: %s LAYER: %s MSG: %s", is_error ? "ERROR" : "WARNING", layer_prefix, message);
 
 	ASSERT(!is_error);
 
@@ -283,22 +289,44 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
     SetForegroundWindow((HWND)main_window_handle);
     UpdateWindow((HWND)main_window_handle);
 
-	// Create vkInstance
+    VkInstance vk_instance = VK_NULL_HANDLE;
 	{
-		
+        VkApplicationInfo app_info = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
+        app_info.apiVersion = VK_API_VERSION_1_1;
+
+        VkInstanceCreateInfo create_info = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+        create_info.pApplicationInfo = &app_info;
+
+#if DEBUG_BUILD
+        char const* debug_layers[] = { "VK_LAYER_KHRONOS_validation" };
+        create_info.ppEnabledLayerNames = debug_layers;
+        create_info.enabledLayerCount = ARRAYSIZE(debug_layers);
+#endif
+
+        char const* extensions[] = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+		    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+		    VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+        };
+
+        create_info.ppEnabledExtensionNames = extensions;
+        create_info.enabledExtensionCount = ARRAYSIZE(extensions);
+
+        VK_CHECK(vkCreateInstance(&create_info, nullptr, &vk_instance));
 	}
+    ASSERT(vk_instance != VK_NULL_HANDLE);
+	
+    volkLoadInstanceOnly(vk_instance);
 
-
+	VkDebugReportCallbackEXT vk_dbg_callback = VK_NULL_HANDLE;
 	{
 		VkDebugReportCallbackCreateInfoEXT create_info = { VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT };
 		create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
 		create_info.pfnCallback = debug_report_callback;
 
-		VkDebugReportCallbackEXT callback = {};
-		VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &create_info, nullptr, &callback));
+		VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &create_info, nullptr, &vk_dbg_callback));
 	}
-
-	//volkLoadInstanceOnly(vk_instance);
+    ASSERT(vk_dbg_callback != VK_NULL_HANDLE);
 
 	// Create vkDevice
 
@@ -329,5 +357,8 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	}
 
     close_window(main_window_handle, &window_params);
+
+    vkDestroyDebugReportCallbackEXT(vk_instance, vk_dbg_callback, nullptr);
+    vkDestroyInstance(vk_instance, nullptr);
 	return 0;
 }

@@ -2,7 +2,11 @@
 #include "stdint.h"
 #include "stdlib.h"
 
-#include <Windows.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+#include <Windows.h> // TODO: hide in platform impl file
 
 #include "volk/volk.h"
 
@@ -24,6 +28,31 @@ using f64 = double;
 #else
     #define DEBUG_BUILD 0
 #endif
+
+#define CONCAT_INNER(l, r) l ## r
+#define CONCAT(l, r) CONCAT_INNER(l, r)
+
+#define UNIQUE_ID(x) CONCAT(x, __COUNTER__)
+
+#define STRINGIFY_INNER(x) #x
+#define STRINGIFY(x) STRINGIFY_INNER(x)
+
+template <typename T>
+struct DeferredFunction
+{
+	DeferredFunction(T&& closure)
+		: closure(static_cast<T&&>(closure))
+	{}
+
+	~DeferredFunction()
+	{
+		closure();
+	}
+
+	T closure;
+};
+
+#define DEFER DeferredFunction const UNIQUE_ID(_scope_exit) = [&] 
 
 enum Print_Flags
 {
@@ -71,6 +100,7 @@ char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...)
 bool handle_assert(char const* condition, char const* msg, ...)
 {
 	char const* user_msg = nullptr;
+	DEFER { delete user_msg; };
 	if (msg)
 	{
 		va_list user_args;
@@ -80,6 +110,7 @@ bool handle_assert(char const* condition, char const* msg, ...)
 	}
 	
 	char const* assert_msg = nullptr;
+	DEFER { delete assert_msg; };
 	if (user_msg)
 	{
 		assert_msg = va_inplace_printf("Condition: %s\nMessage: %s", Print_Flags::APPEND_NEWLINE, condition, user_msg);
@@ -90,9 +121,6 @@ bool handle_assert(char const* condition, char const* msg, ...)
 	}
 
 	bool should_break = (IDYES == MessageBoxA(NULL, assert_msg, "Assert Failed! Break into code?", MB_YESNO | MB_ICONERROR));
-
-	delete user_msg;
-	delete assert_msg;
 
 	return should_break;
 }
@@ -254,6 +282,8 @@ static void close_window(HWND handle, Create_Window_Params* params)
 		ASSERT_MSG(result == VK_SUCCESS, "Error code: %d", result); \
 	} while (false)
 
+#define VK_ASSERT_VALID(handle) ASSERT(handle != VK_NULL_HANDLE)
+
 static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type, 
 	u64 object, size_t location, s32 message_code, char const* layer_prefix, char const* message, void* user_data)
 {
@@ -264,6 +294,26 @@ static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, Vk
 	ASSERT(!is_error);
 
 	return VK_FALSE; // Spec states users should always return false here.
+}
+
+u32 get_gfx_family_index(VkPhysicalDevice phys_device)
+{
+	u32 queue_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, nullptr);
+
+	VkQueueFamilyProperties* queue_props = new VkQueueFamilyProperties[queue_count];
+	DEFER{ delete[] queue_props; };
+	vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props);
+
+	for (u32 i = 0; i < queue_count; ++i)
+	{
+		if (queue_props[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+		{
+			return i;
+		}
+	}
+
+	return VK_QUEUE_FAMILY_IGNORED;
 }
 
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
@@ -318,6 +368,7 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	
     volkLoadInstanceOnly(vk_instance);
 
+#if DEBUG_BUILD
 	VkDebugReportCallbackEXT vk_dbg_callback = VK_NULL_HANDLE;
 	{
 		VkDebugReportCallbackCreateInfoEXT create_info = { VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT };
@@ -327,18 +378,153 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 		VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &create_info, nullptr, &vk_dbg_callback));
 	}
     ASSERT(vk_dbg_callback != VK_NULL_HANDLE);
+#endif // DEBUG_BUILD
 
 	// Create vkDevice
 
-	/*{
+	VkPhysicalDevice vk_phys_device = VK_NULL_HANDLE;
+	{
+		VkPhysicalDevice phys_devices[8];
+		u32 phys_device_count = ARRAYSIZE(phys_devices);
+		VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices));
+
+		VkPhysicalDevice discrete_gpu = VK_NULL_HANDLE;
+		VkPhysicalDevice fallback_gpu = VK_NULL_HANDLE;
+
+		for (u32 i = 0; i < phys_device_count; ++i)
+		{
+			VkPhysicalDeviceProperties props;
+			vkGetPhysicalDeviceProperties(phys_devices[i], &props);
+
+			LOG("Enumerating GPU %s", props.deviceName);
+			
+			u32 family_idx = get_gfx_family_index(phys_devices[i]);
+			if (family_idx == VK_QUEUE_FAMILY_IGNORED)
+			{
+				continue;
+			}
+
+			if (!vkGetPhysicalDeviceWin32PresentationSupportKHR(phys_devices[i], family_idx))
+			{
+				continue;
+			}
+
+			if (!discrete_gpu)
+			{
+				if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+				{
+					discrete_gpu = phys_devices[i];
+					LOG("Found discrete GPU %s", props.deviceName);
+				}
+			}
+
+			if (!fallback_gpu)
+			{
+				fallback_gpu = phys_devices[i];
+				LOG("Found fallback GPU %s", props.deviceName);
+			}
+		}
+
+		vk_phys_device = discrete_gpu ? discrete_gpu : fallback_gpu;
+	}
+	ASSERT_MSG(vk_phys_device != VK_NULL_HANDLE, "No valid GPU device found!");
+	
+	u32 family_idx = get_gfx_family_index(vk_phys_device);
+	ASSERT(family_idx != VK_QUEUE_FAMILY_IGNORED);
+
+	VkDevice vk_device = VK_NULL_HANDLE;
+	{
+		f32 queue_prios[] = { 1.0f };
+
 		VkDeviceQueueCreateInfo queue_info = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-		queue_info.queueFamilyIndex =
+		queue_info.queueFamilyIndex = family_idx;
+		queue_info.queueCount = 1;
+		queue_info.pQueuePriorities = queue_prios;
 
-			VkDeviceCreateInfo create_info = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+		char const* extensions[] =
+		{
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+		};
 
+		VkPhysicalDeviceFeatures features = {};
+		features.vertexPipelineStoresAndAtomics = true;
+
+		VkDeviceCreateInfo create_info = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+		create_info.queueCreateInfoCount = 1;
+		create_info.pQueueCreateInfos = &queue_info;
+		create_info.ppEnabledExtensionNames = extensions;
+		create_info.enabledExtensionCount = ARRAYSIZE(extensions);
+		create_info.pEnabledFeatures = &features;
+
+		VK_CHECK(vkCreateDevice(vk_phys_device, &create_info, nullptr, &vk_device));
+	}
+	VK_ASSERT_VALID(vk_device);
+
+	VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
+	{
+		VkWin32SurfaceCreateInfoKHR create_info = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
+		create_info.hinstance = GetModuleHandle(nullptr);
+		create_info.hwnd = main_window_handle;
+
+		VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
+	}
+	VK_ASSERT_VALID(vk_surface);
+
+	VkBool32 present_supported = false;
+	VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(vk_phys_device, family_idx, vk_surface, &present_supported));
+	ASSERT(present_supported);
+
+	VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
+	{
+		u32 fmt_count = 0;
+		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
+
+		VkSurfaceFormatKHR* fmts = new VkSurfaceFormatKHR[fmt_count];
+		DEFER{ delete fmts; };
+
+		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts));
+		
+		if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
+		{
+			swapchain_fmt =  VK_FORMAT_R8G8B8A8_UNORM;
+		}
+		else
+		{
+			for (u32 i = 0; i < fmt_count; ++i)
+			{
+				if (fmts[i].format == VK_FORMAT_R8G8B8A8_UNORM || 
+					fmts[i].format == VK_FORMAT_B8G8R8A8_UNORM)
+				{
+					swapchain_fmt = fmts[i].format;
+				}
+			}
+		}
+
+		if (swapchain_fmt == VK_FORMAT_UNDEFINED)
+		{
+			swapchain_fmt = fmts[0].format;
+		}
 	}
 
-	volkLoadDevice(vk_device);*/
+	VkSemaphore acq_semaphore = VK_NULL_HANDLE;
+	VkSemaphore rel_semaphore = VK_NULL_HANDLE;
+	{
+		VkSemaphoreCreateInfo create_info = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &acq_semaphore));
+		VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &rel_semaphore));
+		VK_ASSERT_VALID(acq_semaphore);
+		VK_ASSERT_VALID(rel_semaphore);
+	}
+
+	VkQueue vk_queue = VK_NULL_HANDLE;
+	vkGetDeviceQueue(vk_device, family_idx, 0, &vk_queue);
+
+	VkRenderPass vk_render_pass = VK_NULL_HANDLE;
+	{
+	}
+		
+	/*volkLoadDevice(vk_device);*/ // Do we need this?
 
 	bool exit_app = false;    
     MSG msg = {};

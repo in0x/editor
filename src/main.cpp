@@ -133,6 +133,10 @@ bool handle_assert(char const* condition, char const* msg, ...)
 			if (handle_assert( #condition, nullptr )) \
 				__debugbreak();						  \
 
+constexpr bool C_ALWAYS_FAILS = false;
+
+#define ASSERT_FAILED_MSG(msg, ...) ASSERT_MSG(C_ALWAYS_FAILS, msg, __VA_ARGS__)
+
 void log_message(char const* fmt, ...)
 {
 	va_list args;
@@ -314,6 +318,26 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device)
 	}
 
 	return VK_QUEUE_FAMILY_IGNORED;
+}
+
+VkShaderModule load_shader(char const* path)
+{
+	HANDLE shader_file = CreateFileA(
+		path, 
+		GENERIC_READ, 
+		FILE_SHARE_READ, 
+		0, 
+		OPEN_EXISTING, 
+		FILE_ATTRIBUTE_NORMAL, 
+		0);
+
+	if (shader_file == INVALID_HANDLE_VALUE)
+	{
+		ASSERT_FAILED_MSG("Failed to open shader file %s", path);
+		return VK_NULL_HANDLE;
+	}
+
+	return VK_NULL_HANDLE;
 }
 
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
@@ -522,7 +546,36 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 
 	VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 	{
+		VkAttachmentDescription attachment;
+		attachment.format = swapchain_fmt;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		attachment.finalLayout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference color_attachment;
+		color_attachment.attachment = 0;
+		color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass;
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_attachment;
+
+		VkRenderPassCreateInfo create_info = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+		create_info.attachmentCount = 1;
+		create_info.pAttachments = &attachment;
+		create_info.subpassCount = 1;
+		create_info.pSubpasses = &subpass;
+
+		VK_CHECK(vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_render_pass));
 	}
+	VK_ASSERT_VALID(vk_render_pass);
+
+	VkShaderModule vshader = load_shader("bla");
 		
 	/*volkLoadDevice(vk_device);*/ // Do we need this?
 

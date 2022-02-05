@@ -3,7 +3,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <Windows.h> // TODO: hide in platform impl file
+#include <Windows.h> // TODO(): hide in platform impl file
 
 static const WCHAR* c_win32_default_err_msg = L"Failed to get message for this windows error";
 static const WCHAR* c_win32_success_msg = L"This windows operation completed succesfully";
@@ -15,6 +15,11 @@ struct Win32Error
 {
 	DWORD code = 0;
 	LPWSTR msg = nullptr;
+
+	bool is_error()
+	{
+		return code != ERROR_SUCCESS;
+	}
 };
 
 static void free_win32_error(Win32Error error)

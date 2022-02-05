@@ -157,7 +157,7 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
     VkInstance vk_instance = VK_NULL_HANDLE;
 	{
         VkApplicationInfo app_info = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
-        app_info.apiVersion = VK_API_VERSION_1_2;
+        app_info.apiVersion = C_TARGET_VK_VERSION;
 
         VkInstanceCreateInfo create_info = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
         create_info.pApplicationInfo = &app_info;
@@ -368,7 +368,10 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	}
 	VK_ASSERT_VALID(vk_render_pass);
 
-	VkShaderModule vshader = load_shader(vk_device, "bla");
+	shader_compiler_init();
+
+	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex,   "shaders/triangle.vert");
+	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, "shaders/triangle.frag");
 	
 	bool exit_app = false;    
     MSG msg = {};
@@ -387,6 +390,8 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	}
 
     close_window(main_window_handle, &window_params);
+
+	shader_compiler_shutdown();
 
     vkDestroyDebugReportCallbackEXT(vk_instance, vk_dbg_callback, nullptr);
     vkDestroyInstance(vk_instance, nullptr);

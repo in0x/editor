@@ -39,6 +39,8 @@ char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...)
 
 bool handle_assert(char const* condition, char const* msg, ...)
 {
+	// TODO(): Assert handling should be thread-safe and should block the frame end-point.
+
 	char const* user_msg = nullptr;
 	DEFER{ delete user_msg; };
 	if (msg)
@@ -70,7 +72,7 @@ void log_message(char const* fmt, ...)
 	va_list args;
 	va_start(args, fmt);
 
-	// TODO: we dont want to allocate on every log, so reserve a logging buffer instead.
+	// TODO(): we dont want to allocate on every log, so reserve a logging buffer instead.
 	// will need to update inplace_printf to handle truncation (if not write to end of write, cant assume full buffer is used)
 	char const* msg = inplace_printf(fmt, Print_Flags::APPEND_NEWLINE, args);
 	OutputDebugStringA(msg);
@@ -82,7 +84,7 @@ void log_message(char const* fmt, ...)
 void log_last_windows_error()
 {
 	Win32Error err = get_last_windows_error();
-	if (err.msg)
+	if (err.msg && err.is_error())
 	{
 		LOG("%ls", err.msg);
 		free_win32_error(err);

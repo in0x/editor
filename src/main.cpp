@@ -1,188 +1,7 @@
-#include "stdio.h"
-#include "stdint.h"
-#include "stdlib.h"
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#include <Windows.h> // TODO: hide in platform impl file
-
-#include "volk/volk.h"
-
-using s8  =  int8_t;
-using u8  = uint8_t;
-using s16 =  int16_t;
-using u16 = uint16_t;
-using s32 =  int32_t;
-using u32 = uint32_t;
-using s64 =  int64_t;
-using u64 = uint64_t;
-using f32 = float;
-using f64 = double;
-
-#define UNUSED_VAR(x) (void)x
-
-#ifdef _DEBUG
-    #define DEBUG_BUILD 1
-#else
-    #define DEBUG_BUILD 0
-#endif
-
-#define CONCAT_INNER(l, r) l ## r
-#define CONCAT(l, r) CONCAT_INNER(l, r)
-
-#define UNIQUE_ID(x) CONCAT(x, __COUNTER__)
-
-#define STRINGIFY_INNER(x) #x
-#define STRINGIFY(x) STRINGIFY_INNER(x)
-
-template <typename T>
-struct DeferredFunction
-{
-	DeferredFunction(T&& closure)
-		: closure(static_cast<T&&>(closure))
-	{}
-
-	~DeferredFunction()
-	{
-		closure();
-	}
-
-	T closure;
-};
-
-#define DEFER DeferredFunction const UNIQUE_ID(_scope_exit) = [&] 
-
-enum Print_Flags
-{
-	NONE = 0,
-	APPEND_NEWLINE = 0x1,
-};
-
-// NOTE(): Returned pointer must be deleted by caller.
-char const* inplace_printf(char const* fmt, Print_Flags flags, va_list args)
-{
-	bool append_newline = flags & Print_Flags::APPEND_NEWLINE;
-
-	va_list args_copy;
-	va_copy(args_copy, args);
-
-	int required_buffer_size = vsnprintf(nullptr, 0, fmt, args);
-		required_buffer_size += (append_newline) ? 2: 1;
-
-	char* msg_buffer = new char[required_buffer_size];
-	
-	int write_result = vsnprintf_s(msg_buffer, required_buffer_size, _TRUNCATE, fmt, args_copy);
-	UNUSED_VAR(write_result);
-	va_end(args_copy);
-
-	if (append_newline)
-	{
-		msg_buffer[required_buffer_size - 2] = '\n';
-	}
-	
-	msg_buffer[required_buffer_size - 1] = '\0';
-
-	return msg_buffer;
-}
-
-char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...)
-{
-	va_list args;
-	va_start(args, flags);
-	char const* result = inplace_printf(fmt, flags, args);
-	va_end(args);
-
-	return result;
-}
-
-bool handle_assert(char const* condition, char const* msg, ...)
-{
-	char const* user_msg = nullptr;
-	DEFER { delete user_msg; };
-	if (msg)
-	{
-		va_list user_args;
-		va_start(user_args, msg);
-		user_msg = inplace_printf(msg, Print_Flags::NONE, user_args);
-		va_end(user_args);
-	}
-	
-	char const* assert_msg = nullptr;
-	DEFER { delete assert_msg; };
-	if (user_msg)
-	{
-		assert_msg = va_inplace_printf("Condition: %s\nMessage: %s", Print_Flags::APPEND_NEWLINE, condition, user_msg);
-	}
-	else
-	{
-		assert_msg = va_inplace_printf("Condition: %s", Print_Flags::APPEND_NEWLINE, condition);
-	}
-
-	bool should_break = (IDYES == MessageBoxA(NULL, assert_msg, "Assert Failed! Break into code?", MB_YESNO | MB_ICONERROR));
-
-	return should_break;
-}
-
-#define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
-			if (handle_assert( #condition , msg, __VA_ARGS__)) \
-				__debugbreak();								   \
-
-#define ASSERT(condition) if ((condition) == false)   \
-			if (handle_assert( #condition, nullptr )) \
-				__debugbreak();						  \
-
-constexpr bool C_ALWAYS_FAILS = false;
-
-#define ASSERT_FAILED_MSG(msg, ...) ASSERT_MSG(C_ALWAYS_FAILS, msg, __VA_ARGS__)
-
-void log_message(char const* fmt, ...)
-{
-	va_list args;
-	va_start(args, fmt);
-	
-	// TODO: we dont want to allocate on every log, so reserve a logging buffer instead.
-	// will need to update inplace_printf to handle truncation (if not write to end of write, cant assume full buffer is used)
-	char const* msg = inplace_printf(fmt, Print_Flags::APPEND_NEWLINE, args);
-	OutputDebugStringA(msg);
-
-	delete msg;
-	va_end(args);
-}
-
-#define LOG(fmt, ...) log_message(fmt, __VA_ARGS__);
-
-void log_last_windows_error()
-{
-	u32 last_error = GetLastError();
-	if (last_error == ERROR_SUCCESS)
-	{
-		return;
-	}
-
-	LPTSTR error_text = nullptr;
-	DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_IGNORE_INSERTS;
-
-	FormatMessage(
-		flags,
-		nullptr, // unused with FORMAT_MESSAGE_FROM_SYSTEM
-		last_error,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		(LPTSTR)&error_text,
-		0,
-		nullptr);
-
-	if (error_text != nullptr)
-	{
-		LOG("%ls", error_text);
-		LocalFree(error_text);
-	}
-	else
-	{
-		LOG("Failed to get message for last windows error %u", static_cast<u32>(last_error));
-	}
-}
+#include "core.h"
+#include "win32.h"
+#include "vk.h"
+#include "shader_compiler.h"
 
 static LRESULT CALLBACK OnMainWindowEvent(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -280,14 +99,6 @@ static void close_window(HWND handle, Create_Window_Params* params)
     UnregisterClass(params->class_name, GetModuleHandle(nullptr));
 }
 
-#define VK_CHECK(op) \
-	do { \
-		VkResult result = op; \
-		ASSERT_MSG(result == VK_SUCCESS, "Error code: %d", result); \
-	} while (false)
-
-#define VK_ASSERT_VALID(handle) ASSERT(handle != VK_NULL_HANDLE)
-
 static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type, 
 	u64 object, size_t location, s32 message_code, char const* layer_prefix, char const* message, void* user_data)
 {
@@ -320,26 +131,6 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device)
 	return VK_QUEUE_FAMILY_IGNORED;
 }
 
-VkShaderModule load_shader(char const* path)
-{
-	HANDLE shader_file = CreateFileA(
-		path, 
-		GENERIC_READ, 
-		FILE_SHARE_READ, 
-		0, 
-		OPEN_EXISTING, 
-		FILE_ATTRIBUTE_NORMAL, 
-		0);
-
-	if (shader_file == INVALID_HANDLE_VALUE)
-	{
-		ASSERT_FAILED_MSG("Failed to open shader file %s", path);
-		return VK_NULL_HANDLE;
-	}
-
-	return VK_NULL_HANDLE;
-}
-
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
 {
 	VK_CHECK(volkInitialize());
@@ -366,7 +157,7 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
     VkInstance vk_instance = VK_NULL_HANDLE;
 	{
         VkApplicationInfo app_info = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
-        app_info.apiVersion = VK_API_VERSION_1_1;
+        app_info.apiVersion = VK_API_VERSION_1_2;
 
         VkInstanceCreateInfo create_info = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
         create_info.pApplicationInfo = &app_info;
@@ -485,6 +276,8 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	}
 	VK_ASSERT_VALID(vk_device);
 
+	volkLoadDevice(vk_device);
+
 	VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 	{
 		VkWin32SurfaceCreateInfoKHR create_info = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
@@ -575,10 +368,8 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	}
 	VK_ASSERT_VALID(vk_render_pass);
 
-	VkShaderModule vshader = load_shader("bla");
-		
-	/*volkLoadDevice(vk_device);*/ // Do we need this?
-
+	VkShaderModule vshader = load_shader(vk_device, "bla");
+	
 	bool exit_app = false;    
     MSG msg = {};
 	while (!exit_app)

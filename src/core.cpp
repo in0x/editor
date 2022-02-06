@@ -62,6 +62,8 @@ bool handle_assert(char const* condition, char const* msg, ...)
 		assert_msg = va_inplace_printf("Condition: %s", Print_Flags::APPEND_NEWLINE, condition);
 	}
 
+	LOG("ASSERT HIT:\n%s", assert_msg);
+
 	bool should_break = (IDYES == MessageBoxA(NULL, assert_msg, "Assert Failed! Break into code?", MB_YESNO | MB_ICONERROR));
 
 	return should_break;

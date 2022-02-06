@@ -1,8 +1,120 @@
 #include "shader_compiler.h"
 #include "core.h"
 #include "glslang_c_interface.h"
-#include "volk/resource_limits_c.h"
+#include "ResourceLimits.h"
 #include "vk.h"
+
+// Neither the vulkan SDK nor the latest glslang CI build
+// seem to ship with this for some reason, so we just took
+// it from the glslang repo.
+namespace glslang {
+	const TBuiltInResource DefaultTBuiltInResource = {
+		/* .MaxLights = */ 32,
+		/* .MaxClipPlanes = */ 6,
+		/* .MaxTextureUnits = */ 32,
+		/* .MaxTextureCoords = */ 32,
+		/* .MaxVertexAttribs = */ 64,
+		/* .MaxVertexUniformComponents = */ 4096,
+		/* .MaxVaryingFloats = */ 64,
+		/* .MaxVertexTextureImageUnits = */ 32,
+		/* .MaxCombinedTextureImageUnits = */ 80,
+		/* .MaxTextureImageUnits = */ 32,
+		/* .MaxFragmentUniformComponents = */ 4096,
+		/* .MaxDrawBuffers = */ 32,
+		/* .MaxVertexUniformVectors = */ 128,
+		/* .MaxVaryingVectors = */ 8,
+		/* .MaxFragmentUniformVectors = */ 16,
+		/* .MaxVertexOutputVectors = */ 16,
+		/* .MaxFragmentInputVectors = */ 15,
+		/* .MinProgramTexelOffset = */ -8,
+		/* .MaxProgramTexelOffset = */ 7,
+		/* .MaxClipDistances = */ 8,
+		/* .MaxComputeWorkGroupCountX = */ 65535,
+		/* .MaxComputeWorkGroupCountY = */ 65535,
+		/* .MaxComputeWorkGroupCountZ = */ 65535,
+		/* .MaxComputeWorkGroupSizeX = */ 1024,
+		/* .MaxComputeWorkGroupSizeY = */ 1024,
+		/* .MaxComputeWorkGroupSizeZ = */ 64,
+		/* .MaxComputeUniformComponents = */ 1024,
+		/* .MaxComputeTextureImageUnits = */ 16,
+		/* .MaxComputeImageUniforms = */ 8,
+		/* .MaxComputeAtomicCounters = */ 8,
+		/* .MaxComputeAtomicCounterBuffers = */ 1,
+		/* .MaxVaryingComponents = */ 60,
+		/* .MaxVertexOutputComponents = */ 64,
+		/* .MaxGeometryInputComponents = */ 64,
+		/* .MaxGeometryOutputComponents = */ 128,
+		/* .MaxFragmentInputComponents = */ 128,
+		/* .MaxImageUnits = */ 8,
+		/* .MaxCombinedImageUnitsAndFragmentOutputs = */ 8,
+		/* .MaxCombinedShaderOutputResources = */ 8,
+		/* .MaxImageSamples = */ 0,
+		/* .MaxVertexImageUniforms = */ 0,
+		/* .MaxTessControlImageUniforms = */ 0,
+		/* .MaxTessEvaluationImageUniforms = */ 0,
+		/* .MaxGeometryImageUniforms = */ 0,
+		/* .MaxFragmentImageUniforms = */ 8,
+		/* .MaxCombinedImageUniforms = */ 8,
+		/* .MaxGeometryTextureImageUnits = */ 16,
+		/* .MaxGeometryOutputVertices = */ 256,
+		/* .MaxGeometryTotalOutputComponents = */ 1024,
+		/* .MaxGeometryUniformComponents = */ 1024,
+		/* .MaxGeometryVaryingComponents = */ 64,
+		/* .MaxTessControlInputComponents = */ 128,
+		/* .MaxTessControlOutputComponents = */ 128,
+		/* .MaxTessControlTextureImageUnits = */ 16,
+		/* .MaxTessControlUniformComponents = */ 1024,
+		/* .MaxTessControlTotalOutputComponents = */ 4096,
+		/* .MaxTessEvaluationInputComponents = */ 128,
+		/* .MaxTessEvaluationOutputComponents = */ 128,
+		/* .MaxTessEvaluationTextureImageUnits = */ 16,
+		/* .MaxTessEvaluationUniformComponents = */ 1024,
+		/* .MaxTessPatchComponents = */ 120,
+		/* .MaxPatchVertices = */ 32,
+		/* .MaxTessGenLevel = */ 64,
+		/* .MaxViewports = */ 16,
+		/* .MaxVertexAtomicCounters = */ 0,
+		/* .MaxTessControlAtomicCounters = */ 0,
+		/* .MaxTessEvaluationAtomicCounters = */ 0,
+		/* .MaxGeometryAtomicCounters = */ 0,
+		/* .MaxFragmentAtomicCounters = */ 8,
+		/* .MaxCombinedAtomicCounters = */ 8,
+		/* .MaxAtomicCounterBindings = */ 1,
+		/* .MaxVertexAtomicCounterBuffers = */ 0,
+		/* .MaxTessControlAtomicCounterBuffers = */ 0,
+		/* .MaxTessEvaluationAtomicCounterBuffers = */ 0,
+		/* .MaxGeometryAtomicCounterBuffers = */ 0,
+		/* .MaxFragmentAtomicCounterBuffers = */ 1,
+		/* .MaxCombinedAtomicCounterBuffers = */ 1,
+		/* .MaxAtomicCounterBufferSize = */ 16384,
+		/* .MaxTransformFeedbackBuffers = */ 4,
+		/* .MaxTransformFeedbackInterleavedComponents = */ 64,
+		/* .MaxCullDistances = */ 8,
+		/* .MaxCombinedClipAndCullDistances = */ 8,
+		/* .MaxSamples = */ 4,
+		/* .maxMeshOutputVerticesNV = */ 256,
+		/* .maxMeshOutputPrimitivesNV = */ 512,
+		/* .maxMeshWorkGroupSizeX_NV = */ 32,
+		/* .maxMeshWorkGroupSizeY_NV = */ 1,
+		/* .maxMeshWorkGroupSizeZ_NV = */ 1,
+		/* .maxTaskWorkGroupSizeX_NV = */ 32,
+		/* .maxTaskWorkGroupSizeY_NV = */ 1,
+		/* .maxTaskWorkGroupSizeZ_NV = */ 1,
+		/* .maxMeshViewCountNV = */ 4,
+		/* .maxDualSourceDrawBuffersEXT = */ 1,
+
+		/* .limits = */ {
+			/* .nonInductiveForLoops = */ 1,
+			/* .whileLoops = */ 1,
+			/* .doWhileLoops = */ 1,
+			/* .generalUniformIndexing = */ 1,
+			/* .generalAttributeMatrixVectorIndexing = */ 1,
+			/* .generalVaryingIndexing = */ 1,
+			/* .generalSamplerIndexing = */ 1,
+			/* .generalVariableIndexing = */ 1,
+			/* .generalConstantMatrixVectorIndexing = */ 1,
+		} };
+}
 
 struct Buffer
 {
@@ -36,39 +148,36 @@ Buffer load_file(char const* path)
 
 	if (file_handle == INVALID_HANDLE_VALUE)
 	{
-		ASSERT_FAILED_MSG("Failed to open file %", path);
+		ASSERT_FAILED_MSG("Failed to open file %s", path);
 		return Buffer();
 	}
 
-	u32 file_size;
-	{
-		DWORD file_query;
-		GetFileSize(file_handle, &file_query);
-		file_size = file_query;
-	}
-
-	if (file_size == INVALID_FILE_SIZE)
+	LARGE_INTEGER file_size;
+	if (!GetFileSizeEx(file_handle, &file_size))
 	{
 		ASSERT_FAILED_MSG("Failed to get size of file %s", path);
 		return Buffer();
 	}
-
-	u8* data = new u8[file_size];
+	
+	u8* data = new u8[file_size.QuadPart + 1]; // alloc an extra byte to null-terminate the string
+	memset(data, 0, file_size.QuadPart);
 	
 	DWORD num_bytes_read = 0;
-	if (!ReadFile(file_handle, data, file_size, &num_bytes_read, nullptr))
+	if (!ReadFile(file_handle, data, file_size.QuadPart, &num_bytes_read, nullptr))
 	{
 		ASSERT_FAILED_MSG("Failed to read data from file %s", path);
 		delete data;
 		return Buffer();
 	}
 
-	if (num_bytes_read != file_size)
+	if (num_bytes_read != file_size.QuadPart)
 	{
 		ASSERT_FAILED_MSG("Expected to read %llu bytes, but got %d bytes!", file_size, num_bytes_read);
 		delete data;
 		return Buffer();
 	}
+
+	data[num_bytes_read] = '\0'; // the read data is good, set the null terminator now
 
 	return Buffer { data, num_bytes_read };
 }
@@ -118,12 +227,12 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, char
 	input.client_version = map_version(C_TARGET_VK_VERSION);
 	input.target_language = GLSLANG_TARGET_SPV;
 	input.target_language_version = GLSLANG_TARGET_SPV_1_1;
-	input.default_version = 100;
+	input.default_version = 400;
 	input.default_profile = GLSLANG_CORE_PROFILE;
 	input.force_default_version_and_profile = false;
 	input.forward_compatible = false;
 	input.messages = GLSLANG_MSG_DEFAULT_BIT;
-	input.resource = glslang_default_resource();
+	input.resource = (const glslang_resource_t*)&glslang::DefaultTBuiltInResource;
 	input.code = reinterpret_cast<char const*>(shader_code.data);
 
 	glslang_shader_t* shader = glslang_shader_create(&input);
@@ -145,6 +254,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, char
 
 	if (!glslang_shader_parse(shader, &input))
 	{
+		LOG("%s", input.code);
 		log_shader_info(shader);
 		ASSERT_FAILED_MSG("Failed parsing shader %s", src_path);
 		return VK_NULL_HANDLE;
@@ -163,7 +273,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, char
 	}
 
 	glslang_program_SPIRV_generate(program, input.stage);
-	u32 byte_code_size = glslang_program_SPIRV_get_size(program);
+	size_t byte_code_size = glslang_program_SPIRV_get_size(program);
 	u32* byte_code = new u32[byte_code_size];
 	DEFER{ delete byte_code; };
 
@@ -178,7 +288,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, char
 	}
 
 	VkShaderModuleCreateInfo create_info = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-	create_info.codeSize = byte_code_size;
+	create_info.codeSize = byte_code_size * sizeof(u32);
 	create_info.pCode = byte_code;
 
 	VkShaderModule vk_shader = VK_NULL_HANDLE;

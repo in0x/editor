@@ -133,6 +133,32 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device)
 
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
 {
+	struct Path
+	{
+		char buffer[MAX_PATH] = "\0";
+		constexpr u64 buffer_len() const { return MAX_PATH; }
+	};
+
+	Path root_dir;
+	{
+		GetModuleFileNameA(nullptr, root_dir.buffer, root_dir.buffer_len());
+	
+		char* exe_path = strstr(root_dir.buffer, "editor");
+		exe_path += strlen("editor\\");
+		*exe_path = '\0';
+
+		LOG("Root directory: \"%s\"", root_dir);
+	}
+
+	auto make_abs_path = [&root_dir](char const* rel_path) -> Path
+	{
+		// TODO(): Itd be nice to make this into a path combine that guarantees delimiters
+		Path out_path;
+		snprintf(out_path.buffer, out_path.buffer_len(), "%s%s", root_dir.buffer, rel_path);
+
+		return out_path;
+	};
+
 	VK_CHECK(volkInitialize());
 
     Create_Window_Params window_params = {};
@@ -339,7 +365,7 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 
 	VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 	{
-		VkAttachmentDescription attachment;
+		VkAttachmentDescription attachment = {};
 		attachment.format = swapchain_fmt;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -349,11 +375,11 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 		attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		attachment.finalLayout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		VkAttachmentReference color_attachment;
+		VkAttachmentReference color_attachment = {};
 		color_attachment.attachment = 0;
 		color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		VkSubpassDescription subpass;
+		VkSubpassDescription subpass = {};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &color_attachment;
@@ -370,8 +396,10 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 
 	shader_compiler_init();
 
-	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex,   "shaders/triangle.vert");
-	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, "shaders/triangle.frag");
+	Path vert_path = make_abs_path("src\\shaders\\triangle.vert.glsl");
+	Path frag_path = make_abs_path("src\\shaders\\triangle.frag.glsl");
+	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, vert_path.buffer);
+	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, frag_path.buffer);
 	
 	bool exit_app = false;    
     MSG msg = {};

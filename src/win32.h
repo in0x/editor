@@ -1,5 +1,7 @@
 #pragma once
 
+#if PLATFORM_WIN32
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -59,3 +61,15 @@ static Win32Error get_last_windows_error()
 
 	return error;
 }
+
+void message_box_yes_no(); // TODO()
+
+#else // TODO(): We'll want some common interface once we implement
+	  // similar features for OSX, but for now just define it empty.
+
+struct Win32Error {};
+
+static void free_win32_error(Win32Error error) {}
+static Win32Error get_last_windows_error() { return {}; }
+
+#endif // PLATFORM_WIN32

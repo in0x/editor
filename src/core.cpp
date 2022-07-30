@@ -1,6 +1,8 @@
 #pragma once
 #include "core.h"
 
+#include "platform.h"
+
 char const* inplace_printf(char const* fmt, Print_Flags flags, va_list args)
 {
 	bool append_newline = flags & Print_Flags::APPEND_NEWLINE;

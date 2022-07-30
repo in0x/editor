@@ -4,7 +4,13 @@
 #include "stdint.h"
 #include "stdlib.h"
 
-#include "win32.h"
+#if defined(WIN32)
+	#define PLATFORM_WIN32 1
+	#define PLATFORM_OSX 0
+#elif defined(__APPLE__)
+	#define PLATFORM_WIN32 0
+	#define PLATFORM_OSX 1
+#endif
 
 using s8 = int8_t;
 using u8 = uint8_t;
@@ -78,4 +84,4 @@ void log_message(char const* fmt, ...);
 
 #define LOG(fmt, ...) log_message(fmt, __VA_ARGS__);
 
-void log_last_windows_error();
+void log_last_platform_error();

@@ -1,0 +1,1 @@
+clang++ -std=c++17 src/main.cpp -o editor.app/Contents/MacOS/editor -framework foundation -framework cocoa -framework quartzcore

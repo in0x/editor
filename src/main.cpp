@@ -3,6 +3,14 @@
 #include "vk.h"
 #include "shader_compiler.h"
 
+// TODO(phil):
+// 1) move the rest of the windows code from here into win32.h
+// 2) swap out win32 window for osx window
+// 3) get the code compiling under clang
+// 4) get the code linking with vulkan
+// 5) get the window handle from the platform window and feed it to vulkan
+// 6) get the triangle rendering again
+
 static LRESULT CALLBACK OnMainWindowEvent(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
@@ -48,7 +56,7 @@ static HWND create_window(Create_Window_Params* params)
 
     if (class_handle == INVALID_ATOM)
     {
-        log_last_windows_error();
+        log_last_platform_error();
         return (HWND)INVALID_HANDLE_VALUE;
     }
 
@@ -87,7 +95,7 @@ static HWND create_window(Create_Window_Params* params)
     }
     else
     {
-        log_last_windows_error();
+        log_last_platform_error();
         ASSERT_MSG(window_handle != INVALID_HANDLE_VALUE, "Failed to create main window!");
     }
 

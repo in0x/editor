@@ -3,6 +3,7 @@
 #include "stdio.h"
 #include "stdint.h"
 #include "stdlib.h"
+#include "string.h"
 
 #if defined(WIN32)
 	#define PLATFORM_WIN32 1
@@ -39,6 +40,8 @@ using f64 = double;
 #define STRINGIFY_INNER(x) #x
 #define STRINGIFY(x) STRINGIFY_INNER(x)
 
+#define ARRAYSIZE(a) (sizeof(a) / sizeof(*(a)))
+
 template <typename T>
 struct DeferredFunction
 {
@@ -56,7 +59,7 @@ struct DeferredFunction
 
 #define DEFER DeferredFunction const UNIQUE_ID(_scope_exit) = [&] 
 
-enum Print_Flags
+enum class Print_Flags : u8
 {
 	NONE = 0,
 	APPEND_NEWLINE = 0x1,
@@ -68,13 +71,31 @@ char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...);
 
 bool handle_assert(char const* condition, char const* msg, ...);
 
+void debug_break()
+{
+	#if PLATFORM_WIN32
+		__debugbreak();
+	#elif PLATFORM_OSX
+		__builtin_debugtrap();
+	#endif
+}
+
+#if PLATFORM_WIN32
 #define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
-			if (handle_assert( #condition , msg, __VA_ARGS__)) \
-				__debugbreak();								   \
+			if (handle_assert( #condition , msg, __VA_ARGS__ ))    \
+				debug_break();								       \
+    
+#elif PLATFORM_OSX
+
+#define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
+			if (handle_assert( #condition , msg, ##__VA_ARGS__ ))  \
+				debug_break();								       \
+
+#endif
 
 #define ASSERT(condition) if ((condition) == false)   \
 			if (handle_assert( #condition, nullptr )) \
-				__debugbreak();						  \
+				debug_break();						  \
 
 constexpr bool C_ALWAYS_FAILS = false;
 

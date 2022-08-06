@@ -1,5 +1,5 @@
 #include "core.h"
-#include "win32.h"
+#include "platform.h"
 #include "vk.h"
 #include "shader_compiler.h"
 
@@ -11,101 +11,6 @@
 // 5) get the window handle from the platform window and feed it to vulkan
 // 6) get the triangle rendering again
 
-static LRESULT CALLBACK OnMainWindowEvent(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
-{
-	switch (message)
-	{
-	case WM_CREATE:
-	{
-		LPCREATESTRUCT createStruct = reinterpret_cast<LPCREATESTRUCT>(lParam);
-		SetWindowLongPtr(handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
-		break;
-	}
-
-	case WM_CLOSE:
-	{
-		PostQuitMessage(0);
-		break;
-	}
-	}
-
-	return DefWindowProcW(handle, message, wParam, lParam);
-}
-
-struct Create_Window_Params
-{
-    u32 x;
-    u32 y;
-    u32 width;
-    u32 height;
-    WCHAR const* class_name;
-    WCHAR const* title;
-};
-
-static HWND create_window(Create_Window_Params* params)
-{
-    WNDCLASSEX window_class = {};
-    window_class.cbSize = sizeof(WNDCLASSEX);
-    window_class.style =  CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    window_class.lpfnWndProc =   &OnMainWindowEvent;
-    window_class.hInstance =     GetModuleHandle(nullptr);
-    window_class.lpszClassName = params->class_name;
-
-    ATOM class_handle = RegisterClassEx(&window_class);
-    ASSERT_MSG(class_handle != INVALID_ATOM, "Failed to register window class type %ls!", params->class_name);
-
-    if (class_handle == INVALID_ATOM)
-    {
-        log_last_platform_error();
-        return (HWND)INVALID_HANDLE_VALUE;
-    }
-
-    RECT window_dim = {};
-    window_dim.left = params->x;
-    window_dim.top =  params->y;
-    window_dim.bottom = params->y + params->height;
-    window_dim.right =  params->x + params->width;
-
-    DWORD ex_window_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-    DWORD window_style = WS_OVERLAPPEDWINDOW;
-
-    BOOL has_menu = FALSE;
-    AdjustWindowRect(&window_dim, WS_OVERLAPPEDWINDOW, has_menu);
-
-    WCHAR const* window_title = L"Editor";
-
-    HANDLE window_handle = CreateWindowEx(
-                            ex_window_style,
-                            params->class_name,
-                            params->title,
-                            WS_CLIPSIBLINGS | WS_CLIPCHILDREN | window_style,
-                            window_dim.left,
-                            window_dim.top,
-                            window_dim.right - window_dim.left,
-                            window_dim.bottom - window_dim.top,
-                            nullptr,
-                            nullptr,
-                            GetModuleHandle(nullptr),
-                            nullptr);
-
-    if (window_handle != INVALID_HANDLE_VALUE)
-    {
-        LOG("Created new window TITLE: %ls X: %ld Y: %ld WIDTH: %ld HEIGHT: %ld", params->title, window_dim.left, window_dim.top, 
-            window_dim.right - window_dim.left, window_dim.bottom - window_dim.top);
-    }
-    else
-    {
-        log_last_platform_error();
-        ASSERT_MSG(window_handle != INVALID_HANDLE_VALUE, "Failed to create main window!");
-    }
-
-    return (HWND)window_handle;
-}
-
-static void close_window(HWND handle, Create_Window_Params* params)
-{
-    UnregisterClass(params->class_name, GetModuleHandle(nullptr));
-}
 
 static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type, 
 	u64 object, size_t location, s32 message_code, char const* layer_prefix, char const* message, void* user_data)
@@ -139,18 +44,18 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device)
 	return VK_QUEUE_FAMILY_IGNORED;
 }
 
+#if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) 
+#else
+int main(int argc, char** argv)
 {
-	struct Path
-	{
-		char buffer[MAX_PATH] = "\0";
-		constexpr u64 buffer_len() const { return MAX_PATH; }
-	};
+    Platform_App platform_app = platform_create_app();
 
 	Path root_dir;
 	{
-		GetModuleFileNameA(nullptr, root_dir.buffer, root_dir.buffer_len());
-	
+        bool success = platform_get_exe_path(&root_dir);
+        ASSERT_MSG(success, "Failed to get path to exe");
+        
 		char* exe_path = strstr(root_dir.buffer, "editor");
 		exe_path += strlen("editor\\");
 		*exe_path = '\0';
@@ -169,25 +74,30 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 
 	VK_CHECK(volkInitialize());
 
-    Create_Window_Params window_params = {};
-    window_params.x = 50;
-    window_params.y = 50;
-    window_params.width  = 800;
-    window_params.height = 800;
-    window_params.class_name = L"editor_window_class";
-    window_params.title = L"Editor";
+    // TODO(platform_port): Create window throught platform agnostic path
+    // and extract window handle for vulkan
+    
+    // Create_Window_Params window_params = {};
+    // window_params.x = 50;
+    // window_params.y = 50;
+    // window_params.width  = 800;
+    // window_params.height = 800;
+    // window_params.class_name = L"editor_window_class";
+    // window_params.title = L"Editor";
 
-    HWND main_window_handle = create_window(&window_params);
+    // HWND main_window_handle = create_window(&window_params);
         
-    if (main_window_handle == INVALID_HANDLE_VALUE)
-    {
-        return -1;
-    }
+    // if (main_window_handle == INVALID_HANDLE_VALUE)
+    // {
+    //     return -1;
+    // }
 
-    ShowWindow((HWND)main_window_handle, SW_SHOW);
-    SetForegroundWindow((HWND)main_window_handle);
-    UpdateWindow((HWND)main_window_handle);
+    // ShowWindow((HWND)main_window_handle, SW_SHOW);
+    // SetForegroundWindow((HWND)main_window_handle);
+    // UpdateWindow((HWND)main_window_handle);
 
+    Platform_Window main_window_handle = platform_create_window(platform_app);
+    
     VkInstance vk_instance = VK_NULL_HANDLE;
 	{
         VkApplicationInfo app_info = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
@@ -204,8 +114,12 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 
         char const* extensions[] = {
             VK_KHR_SURFACE_EXTENSION_NAME,
-		    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 		    VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+#if PLATFORM_WIN32
+            VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#elif PLATFORM_OSX
+            VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
+#endif
         };
 
         create_info.ppEnabledExtensionNames = extensions;
@@ -253,11 +167,16 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 				continue;
 			}
 
+#if PLATFORM_WIN32
 			if (!vkGetPhysicalDeviceWin32PresentationSupportKHR(phys_devices[i], family_idx))
 			{
 				continue;
 			}
-
+#endif
+            // According to spec: "On macOS, all physical devices and queue families must be capable of
+            // presentation with any layer. As a result there is no macOS-specific query for these
+            // capabilities."
+            
 			if (!discrete_gpu)
 			{
 				if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -313,14 +232,24 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	volkLoadDevice(vk_device);
 
 	VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
-	{
-		VkWin32SurfaceCreateInfoKHR create_info = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
-		create_info.hinstance = GetModuleHandle(nullptr);
-		create_info.hwnd = main_window_handle;
 
-		VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
-	}
-	VK_ASSERT_VALID(vk_surface);
+#if PLATFORM_WIN32
+
+    VkWin32SurfaceCreateInfoKHR create_info = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
+    create_info.hinstance = GetModuleHandle(nullptr);
+    create_info.hwnd = main_window_handle;
+
+    VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
+
+#elif PLATFORM_OSX
+
+    VkMacOSSurfaceCreateInfoMVK create_info = { VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK };
+    create_info.pView = platform_window_get_raw_handle(main_window_handle);
+
+    VK_CHECK(vkCreateMacOSSurfaceMVK(vk_instance, &create_info, nullptr, &vk_surface));
+#endif
+
+    VK_ASSERT_VALID(vk_surface);
 
 	VkBool32 present_supported = false;
 	VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(vk_phys_device, family_idx, vk_surface, &present_supported));
@@ -332,7 +261,7 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
 
 		VkSurfaceFormatKHR* fmts = new VkSurfaceFormatKHR[fmt_count];
-		DEFER{ delete fmts; };
+		DEFER{ delete[] fmts; };
 
 		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts));
 		
@@ -409,27 +338,21 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, vert_path.buffer);
 	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, frag_path.buffer);
 	
-	bool exit_app = false;    
-    MSG msg = {};
-	while (!exit_app)
-	{
-		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
-		{
-			if (WM_QUIT == msg.message)
-			{
-				exit_app = true;
-			}
-
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-	}
-
-    close_window(main_window_handle, &window_params);
-
+    while (!platform_window_closing(main_window_handle))
+    {
+        platform_pump_events(platform_app, main_window_handle);
+    }
+    
+    // close_window(main_window_handle, &window_params);
+    platform_destroy_window(main_window_handle);
+    
 	shader_compiler_shutdown();
 
     vkDestroyDebugReportCallbackEXT(vk_instance, vk_dbg_callback, nullptr);
     vkDestroyInstance(vk_instance, nullptr);
-	return 0;
+
+    platform_destroy_app(platform_app);
+    
+    return 0;
 }
+#endif

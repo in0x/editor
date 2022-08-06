@@ -225,9 +225,9 @@ struct OSX_Window_Impl
 
 @end // AppHelper
 
-OSX_App osx_create_app()
+Platform_App platform_create_app()
 {
-    OSX_App app_wrapper = {};
+    Platform_App app_wrapper = {};
     app_wrapper.impl = new OSX_App_Impl;
     OSX_App_Impl* app = app_wrapper.impl;
 
@@ -284,14 +284,14 @@ OSX_App osx_create_app()
     return app_wrapper;
 }
 
-void osx_destroy_app(OSX_App app)
+void platform_destroy_app(Platform_App app)
 {
     delete app.impl;
 }
 
-OSX_Window osx_create_window(OSX_App app)
+Platform_Window platform_create_window(Platform_App app)
 {
-    OSX_Window window_wrapper = {};
+    Platform_Window window_wrapper = {};
     window_wrapper.impl = new OSX_Window_Impl;
     OSX_Window_Impl* window = window_wrapper.impl;
 
@@ -353,17 +353,31 @@ OSX_Window osx_create_window(OSX_App app)
     return window_wrapper;
 }
 
-bool osx_window_closing(OSX_Window window)
+void* platform_window_get_raw_handle(Platform_Window window)
+{
+    NSView* ns_view = (__bridge NSView*)window->view;
+    if ([ns_view.layer isKindOfClass:[CAMetalLayer class]])
+    {
+        return (void*)ns_view.layer;
+    }
+    else
+    {
+        LOG("Cant return raw handle for OSX window because it does not have a metal layer.");
+        return nullptr;
+    }
+}
+
+bool platform_window_closing(Platform_Window window);
 {
     return window.impl->should_terminate;
 }
 
-void osx_destroy_window(OSX_Window window)
+void platform_destroy_window(Platform_Window window);
 {
     delete window.impl;
 }
 
-void osx_pump_events()
+void platform_pump_events(Platform_App app, Platform_Window main_window)
 {
     @autoreleasepool 
     {
@@ -383,14 +397,34 @@ void osx_pump_events()
     } // autoreleasepool
 }
 
-void osx_message_box_yes_no()
+bool message_box_yes_no(char const* title, char const* message)
 {
-    //  @autoreleasepool
-    // {
-    //     NSAlert* alert = [[NSAlert alloc] init];
+    @autoreleasepool
+    {
+        NSAlert* alert = [[NSAlert alloc] init];
 
-    //     alert.messageText = @"This is a test";
 
-    //     NSModalResponse response = [alert runModal];
-    // }
+        NSString* ns_title = [NSString stringWithCString:title encoding:NSASCIIStringEncoding];
+        NSString* ns_msg = [NSString stringWithCString:message encoding:NSASCIIStringEncoding];
+
+        alert.messageText = ns_title;
+        alert.informativeText = ns_msg;
+
+        NSButton yes_button = [alert addButtonWithTitle:@"Yes"];
+        NSButton no_button  = [alert addButtonWithTitle:@"No"];
+        
+        NSModalResponse response = [alert runModal];
+
+        return (response == NSModalResponse.NSAlertFirstButtonReturn);
+    }
+}
+
+bool platform_get_exe_path(Path* path)
+{
+    s32 retval = _NSGetExecutablePath(path.buffer, path.buffer_len());
+    if (retval == -1)
+    {
+        LOG("Failed to get executable path because the out buffer was too small");
+    }
+    return retval == 0;
 }

@@ -1,9 +1,13 @@
-#include "osx_platform.h"
+#include "osx.h"
+
+#include "core.h"
+#include "stdio.h"
 
 #import <Foundation/Foundation.h>
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#include <mach-o/dyld.h>
 #include <assert.h>
 
 struct OSX_App_Impl
@@ -55,12 +59,12 @@ struct OSX_Window_Impl
     return window;
 }
 
-- (instancetype)init:(OSX_Window_Impl*)window
+- (instancetype)init:(OSX_Window_Impl*)new_window
 {
     self = [super init];
     if (self != nil)
     {
-        self->window = window;
+        self->window = new_window;
     }
 
     return self;
@@ -82,18 +86,18 @@ struct OSX_Window_Impl
     NSMutableAttributedString* markedText;
 }
 
-- (instancetype)init:(OSX_Window_Impl*)window;
+- (instancetype)init:(OSX_Window_Impl*)new_window;
 
 @end // interface ContentView
 
 @implementation ContentView
 
-- (instancetype)init:(OSX_Window_Impl *)window
+- (instancetype)init:(OSX_Window_Impl *)new_window
 {
     self = [super init];
     if (self != nil)
     {
-        self->window = window;
+        self->window = new_window;
         self->trackingArea = nil;
         self->markedText = [[NSMutableAttributedString alloc] init];
 
@@ -355,7 +359,7 @@ Platform_Window platform_create_window(Platform_App app)
 
 void* platform_window_get_raw_handle(Platform_Window window)
 {
-    NSView* ns_view = (__bridge NSView*)window->view;
+    NSView* ns_view = (__bridge NSView*)window.impl->view;
     if ([ns_view.layer isKindOfClass:[CAMetalLayer class]])
     {
         return (void*)ns_view.layer;
@@ -367,12 +371,12 @@ void* platform_window_get_raw_handle(Platform_Window window)
     }
 }
 
-bool platform_window_closing(Platform_Window window);
+bool platform_window_closing(Platform_Window window)
 {
     return window.impl->should_terminate;
 }
 
-void platform_destroy_window(Platform_Window window);
+void platform_destroy_window(Platform_Window window)
 {
     delete window.impl;
 }
@@ -410,21 +414,95 @@ bool message_box_yes_no(char const* title, char const* message)
         alert.messageText = ns_title;
         alert.informativeText = ns_msg;
 
-        NSButton yes_button = [alert addButtonWithTitle:@"Yes"];
-        NSButton no_button  = [alert addButtonWithTitle:@"No"];
+        NSButton* yes_button = [alert addButtonWithTitle:@"Yes"];
+        NSButton* no_button  = [alert addButtonWithTitle:@"No"];
         
         NSModalResponse response = [alert runModal];
 
-        return (response == NSModalResponse.NSAlertFirstButtonReturn);
+        return (response == NSAlertFirstButtonReturn);
     }
 }
 
-bool platform_get_exe_path(Path* path)
+bool platform_get_exe_path(String* path)
 {
-    s32 retval = _NSGetExecutablePath(path.buffer, path.buffer_len());
+    u32 buffer_len = path->len;
+    s32 retval = _NSGetExecutablePath(path->buffer, &buffer_len);
     if (retval == -1)
     {
         LOG("Failed to get executable path because the out buffer was too small");
     }
     return retval == 0;
+}
+
+bool is_file_valid(File_Handle handle)
+{
+    return handle.handle != nullptr;
+}
+
+File_Handle open_file(String path)  
+{
+    File_Handle file = {};
+    file.handle = fopen(path.buffer, "r");
+    if (file.handle)
+    {
+        file.path = alloc_string(path.buffer);
+    }
+    else
+    {
+        ASSERT_FAILED_MSG("Failed to open file '%s'", path.buffer);
+    }
+
+    return file;
+}
+
+void close_file(File_Handle file)
+{
+    if (file.handle)
+    {
+        fclose(file.handle);
+    }
+
+    free_string(file.path);
+}
+
+Option<u64> get_file_size(File_Handle file)
+{
+    Option<u64> result = {};
+    
+    if (file.handle)
+    {
+        u64 cur_file_pos = ftell(file.handle); // remember where the file head is currently
+        if (cur_file_pos != 0)
+        {
+            fseek(file.handle, 0, SEEK_SET); // set the file headposition back to start incase it isn't currently
+        }
+        
+        fseek(file.handle, 0, SEEK_END);    // set the position to the end of the file
+        u64 file_size = ftell(file.handle); // read how many bytes the position moved from start to end
+        option_set(&result, file_size);
+        
+        fseek(file.handle, cur_file_pos, SEEK_SET);
+    }
+
+    return result;
+}
+
+Option<u64> read_file(File_Handle file, Array<u8>* buffer, u32 num_bytes)
+{
+    Option<u64> result;
+
+    if (is_file_valid(file))
+    {
+        return result;
+    }
+    
+    array_set_count(buffer, num_bytes);
+
+    u64 bytes_read = fread(buffer->data, 1, num_bytes, file.handle);
+    if (bytes_read != num_bytes)
+    {
+        
+    }
+
+    return result;
 }

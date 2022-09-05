@@ -106,3 +106,18 @@ void log_last_platform_error()
 	}
 #endif
 }
+
+String alloc_string(char const* src)
+{
+	String str;
+	str.len = strlen(src);
+    str.buffer = new char[str.len];
+    memcpy(str.buffer, src, str.len);
+
+	return str;
+}
+
+void free_string(String str)
+{
+	delete[] str.buffer;
+}

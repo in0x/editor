@@ -1,7 +1,7 @@
 #pragma once
+#include "num_types.h"
 #include "stdarg.h"
 #include "stdio.h"
-#include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
 
@@ -12,17 +12,6 @@
 	#define PLATFORM_WIN32 0
 	#define PLATFORM_OSX 1
 #endif
-
-using s8 = int8_t;
-using u8 = uint8_t;
-using s16 = int16_t;
-using u16 = uint16_t;
-using s32 = int32_t;
-using u32 = uint32_t;
-using s64 = int64_t;
-using u64 = uint64_t;
-using f32 = float;
-using f64 = double;
 
 #define UNUSED_VAR(x) (void)x
 
@@ -99,10 +88,37 @@ void debug_break()
 
 constexpr bool C_ALWAYS_FAILS = false;
 
-#define ASSERT_FAILED_MSG(msg, ...) ASSERT_MSG(C_ALWAYS_FAILS, msg, __VA_ARGS__)
+#define ASSERT_FAILED_MSG(msg, ...) ASSERT_MSG(C_ALWAYS_FAILS, msg, ## __VA_ARGS__)
 
 void log_message(char const* fmt, ...);
 
-#define LOG(fmt, ...) log_message(fmt, __VA_ARGS__);
+#define LOG(fmt, ...) log_message(fmt, ## __VA_ARGS__);
 
 void log_last_platform_error();
+
+#if PLATFORM_OSX
+    #define MAX_PATH 260
+#endif
+
+template <typename T>
+struct Option
+{
+    T value = {};
+    bool has_value = false;
+};
+
+template <typename T>
+void option_set(Option<T>* option, T value)
+{
+    option->value     = value;
+    option->has_value = true;
+}
+
+struct String
+{
+	char* buffer = nullptr;
+	u32 len = 0;
+};
+
+String alloc_string(char const* src);
+void free_string(String str);

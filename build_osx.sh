@@ -1,1 +1,1 @@
-clang++ -std=c++17 src/main.cpp src/core.cpp  -o editor.app/Contents/MacOS/editor -framework foundation -framework cocoa -framework quartzcore -D VK_USE_PLATFORM_MACOS_MVK -D _DEBUG
+clang++ -std=c++17 src/main.cpp src/core.cpp src/osx.mm src/shader_compiler.cpp  -o editor.app/Contents/MacOS/editor -framework foundation -framework cocoa -framework quartzcore -D VK_USE_PLATFORM_MACOS_MVK -D _DEBUG -I $VULKAN_SDK/1.3.204.1/MacOS/include/glslang/Include

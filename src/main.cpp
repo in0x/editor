@@ -51,7 +51,7 @@ int main(int argc, char** argv)
 {
     Platform_App platform_app = platform_create_app();
 
-	Path root_dir;
+	String root_dir;
 	{
         bool success = platform_get_exe_path(&root_dir);
         ASSERT_MSG(success, "Failed to get path to exe");
@@ -63,14 +63,11 @@ int main(int argc, char** argv)
 		LOG("Root directory: \"%s\"", root_dir);
 	}
 
-	auto make_abs_path = [&root_dir](char const* rel_path) -> Path
+	auto make_abs_path = [&root_dir](char const* rel_path, char* dst, u32 dst_size)
 	{
 		// TODO(): Itd be nice to make this into a path combine that guarantees delimiters
-		Path out_path;
-		snprintf(out_path.buffer, out_path.buffer_len(), "%s%s", root_dir.buffer, rel_path);
-
-		return out_path;
-	};
+		snprintf(dst, dst_size, "%s%s", root_dir.buffer, rel_path);
+    };
 
 	VK_CHECK(volkInitialize());
 
@@ -333,10 +330,13 @@ int main(int argc, char** argv)
 
 	shader_compiler_init();
 
-	Path vert_path = make_abs_path("src\\shaders\\triangle.vert.glsl");
-	Path frag_path = make_abs_path("src\\shaders\\triangle.frag.glsl");
-	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, vert_path.buffer);
-	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, frag_path.buffer);
+    char shader_path[MAX_PATH] = "\0";
+    
+    make_abs_path("src\\shaders\\triangle.vert.glsl", shader_path, MAX_PATH);
+	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, shader_path);
+
+    make_abs_path("src\\shaders\\triangle.frag.glsl", shader_path, MAX_PATH);
+	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, shader_path);
 	
     while (!platform_window_closing(main_window_handle))
     {

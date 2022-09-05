@@ -1,6 +1,8 @@
 #include "shader_compiler.h"
+#include "array.h"
 #include "core.h"
 #include "glslang_c_interface.h"
+#include "platform.h"
 #include "ResourceLimits.h"
 #include "vk.h"
 
@@ -125,61 +127,60 @@ struct Buffer
 	void free() { delete data; }
 };
 
-Buffer load_file(char const* path)
+Array<u8> load_file(char const* path)
 {
-	DEFER
+	DEFER { log_last_platform_error(); };
+
+	String file_path = alloc_string(path);
+
+	File_Handle file_handle = open_file(&file_path);
+	DEFER { close_file(file_handle); };
+
+    Array<u8> shader_content;
+    
+	if (is_file_valid(file_handle))
 	{
-		log_last_windows_error();
+		ASSERT_FAILED_MSG("Failed to open shader file %s", file_path.buffer);
+		return shader_content;
+	}
+
+	Option<u64> file_size_result = get_file_size(file_handle);
+	if (!file_size_result.has_value)
+	{
+		ASSERT_FAILED_MSG("Failed to read size of shader file %s", file_path.buffer)
+		return shader_content;
+	}
+    
+	u64 file_size = file_size_result.value;
+	u64 content_size = file_size + 1; // alloc an extra byte to null-terminate the string
+    
+    array_alloc(&shader_content, content_size);
+    
+	bool found_error = false;
+	DEFER
+    {
+		if (found_error) array_free(&shader_content);
 	};
 
-	HANDLE file_handle = CreateFileA(
-		path,
-		GENERIC_READ,
-		FILE_SHARE_READ,
-		0,
-		OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL,
-		0);
+    Option<u64> read_result = read_file(file_handle, &shader_content, file_size);
+    if (!read_result.has_value)
+    {
+        found_error = true;
+        return shader_content;
+    }
 
-	DEFER
-	{
-		CloseHandle(file_handle);
-	};
+    u64 num_bytes_read = read_result.value;
 
-	if (file_handle == INVALID_HANDLE_VALUE)
-	{
-		ASSERT_FAILED_MSG("Failed to open file %s", path);
-		return Buffer();
-	}
-
-	LARGE_INTEGER file_size;
-	if (!GetFileSizeEx(file_handle, &file_size))
-	{
-		ASSERT_FAILED_MSG("Failed to get size of file %s", path);
-		return Buffer();
-	}
-	
-	u8* data = new u8[file_size.QuadPart + 1]; // alloc an extra byte to null-terminate the string
-	memset(data, 0, file_size.QuadPart);
-	
-	DWORD num_bytes_read = 0;
-	if (!ReadFile(file_handle, data, file_size.QuadPart, &num_bytes_read, nullptr))
-	{
-		ASSERT_FAILED_MSG("Failed to read data from file %s", path);
-		delete data;
-		return Buffer();
-	}
-
-	if (num_bytes_read != file_size.QuadPart)
+	if (read_result.value != file_size)
 	{
 		ASSERT_FAILED_MSG("Expected to read %llu bytes, but got %d bytes!", file_size, num_bytes_read);
-		delete data;
-		return Buffer();
+		found_error = true;
+		return shader_content;
 	}
 
-	data[num_bytes_read] = '\0'; // the read data is good, set the null terminator now
+	shader_content[num_bytes_read] = '\0'; // the read data is good, set the null terminator now
 
-	return Buffer { data, num_bytes_read };
+	return shader_content;
 }
 
 glslang_stage_t map_stage(Shader_Stage::Enum val)
@@ -212,13 +213,14 @@ glslang_target_client_version_t map_version(u32 val)
 
 VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, char const* src_path)
 {
-	Buffer shader_code = load_file(src_path);
-	if (!shader_code.is_valid())
+	Array<u8> shader_code = load_file(src_path);
+	if (array_empty(shader_code))
 	{
 		LOG("Failed to load shader from %s", src_path);
-	}
+        return VK_NULL_HANDLE;
+    }
 
-	DEFER{ shader_code.free(); };
+	DEFER{ array_free(&shader_code); };
 
 	glslang_input_t input = {};
 	input.language = GLSLANG_SOURCE_GLSL;
@@ -275,7 +277,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, char
 	glslang_program_SPIRV_generate(program, input.stage);
 	size_t byte_code_size = glslang_program_SPIRV_get_size(program);
 	u32* byte_code = new u32[byte_code_size];
-	DEFER{ delete byte_code; };
+	DEFER{ delete[] byte_code; };
 
 	glslang_program_SPIRV_get(program, byte_code);
 

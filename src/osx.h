@@ -39,7 +39,7 @@ struct File_Handle
 };
 
 bool is_file_valid(File_Handle handle);
-File_Handle open_file(String* path);
+File_Handle open_file(String path);
 void close_file(File_Handle file);
 Option<u64> get_file_size(File_Handle file);
 Option<u64> read_file(File_Handle file, Array<u8>* buffer, u32 num_bytes);

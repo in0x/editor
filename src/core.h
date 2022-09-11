@@ -60,7 +60,7 @@ char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...);
 
 bool handle_assert(char const* condition, char const* msg, ...);
 
-void debug_break()
+static void debug_break()
 {
 	#if PLATFORM_WIN32
 		__debugbreak();

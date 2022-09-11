@@ -133,7 +133,7 @@ Array<u8> load_file(char const* path)
 
 	String file_path = alloc_string(path);
 
-	File_Handle file_handle = open_file(&file_path);
+	File_Handle file_handle = open_file(file_path);
 	DEFER { close_file(file_handle); };
 
     Array<u8> shader_content;

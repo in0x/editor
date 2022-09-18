@@ -139,7 +139,7 @@ Array<u8> load_file(char const* path)
 
     Array<u8> shader_content;
     
-	if (is_file_valid(file_handle))
+	if (!is_file_valid(file_handle))
 	{
 		ASSERT_FAILED_MSG("Failed to open shader file %s", file_path.buffer);
 		return shader_content;
@@ -179,6 +179,7 @@ Array<u8> load_file(char const* path)
 		return shader_content;
 	}
 
+	array_set_count(&shader_content, content_size);
 	shader_content[num_bytes_read] = '\0'; // the read data is good, set the null terminator now
 
 	return shader_content;

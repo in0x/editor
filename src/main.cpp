@@ -58,7 +58,7 @@ int main(int argc, char** argv)
         ASSERT_MSG(success, "Failed to get path to exe, got %s", root_dir.buffer ? root_dir.buffer : "{null}");
         
 		char* exe_path = strstr(root_dir.buffer, "editor");
-		exe_path += strlen("editor\\");
+		exe_path += strlen("editor/");
 		*exe_path = '\0';
 
 		LOG("Root directory: \"%s\"", root_dir);
@@ -338,10 +338,10 @@ int main(int argc, char** argv)
 
     char shader_path[MAX_PATH] = "\0";
     
-    make_abs_path("src\\shaders\\triangle.vert.glsl", shader_path, MAX_PATH);
+    make_abs_path("src/shaders/triangle.vert.glsl", shader_path, MAX_PATH);
 	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, shader_path);
 
-    make_abs_path("src\\shaders\\triangle.frag.glsl", shader_path, MAX_PATH);
+    make_abs_path("src/shaders/triangle.frag.glsl", shader_path, MAX_PATH);
 	VkShaderModule frag_vshader = compile_shader(vk_device, Shader_Stage::fragment, shader_path);
 	
     while (!platform_window_closing(main_window_handle))

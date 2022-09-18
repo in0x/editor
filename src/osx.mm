@@ -66,21 +66,25 @@ struct OSX_Window_Impl
     id view;
     id layer;
 
-    bool maximized;
-    bool occluded;
-    bool retina;
+    bool maximized = false;
+    bool occluded = false;
+    bool retina = false;
 
-    bool should_terminate;
+    bool should_terminate = false;
 
     // Cached window properties to filter out duplicate events
-    int width, height;
-    int fbWidth, fbHeight;
-    float xscale, yscale;
+    int width = 0; 
+    int height = 0;
+    int fbWidth = 0;
+    int fbHeight = 0;
+    float xscale = 0;
+    float yscale = 0;
 
     // The total sum of the distances the cursor has been warped
     // since the last cursor motion event was processed
     // This is kept to counteract Cocoa doing the same internally
-    double cursorWarpDeltaX, cursorWarpDeltaY;
+    double cursorWarpDeltaX = 0;
+    double cursorWarpDeltaY = 0;
 };
 
 @interface WindowDelegate : NSObject 
@@ -534,7 +538,7 @@ Option<u64> read_file(File_Handle file, Array<u8>* buffer, u32 num_bytes)
 {
     Option<u64> result;
 
-    if (is_file_valid(file))
+    if (!is_file_valid(file))
     {
         return result;
     }
@@ -544,8 +548,10 @@ Option<u64> read_file(File_Handle file, Array<u8>* buffer, u32 num_bytes)
     u64 bytes_read = fread(buffer->data, 1, num_bytes, file.handle);
     if (bytes_read != num_bytes)
     {
-        
+        LOG("Did not read expected number of bytes from file: expected=%llu, actual=%llu", num_bytes, bytes_read);
     }
+
+    option_set(&result, bytes_read);
 
     return result;
 }

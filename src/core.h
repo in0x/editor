@@ -13,6 +13,12 @@
 	#define PLATFORM_OSX 1
 #endif
 
+#if PLATFORM_WIN32
+	#define FORCEINLINE __forceinline
+#elif PLATFORM_OSX
+	#define FORCEINLINE __attribute__((always_inline))
+#endif
+
 #define UNUSED_VAR(x) (void)x
 
 #ifdef _DEBUG
@@ -58,38 +64,23 @@ enum class Print_Flags : u8
 char const* inplace_printf(char const* fmt, Print_Flags flags, va_list args);
 char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...);
 
-bool handle_assert(char const* condition, char const* msg, ...);
-
-static void debug_break()
-{
-	#if PLATFORM_WIN32
-		__debugbreak();
-	#elif PLATFORM_OSX
-		__builtin_debugtrap();
-	#endif
-}
-
-// NOTE(phil): Some day I should try debug breaking first, then throwing up the
-// message box if we're not attached or continued. I think that would speed up the workflow.
+void handle_assert(char const* condition, char const* msg, ...);
 
 #define __LOCATION_INFO__ "In: " __FILE__ "\nAt: " STRINGIFY(__LINE__) ", " __FUNCTION__ "() " 
 
 #if PLATFORM_WIN32
 #define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
-			if (handle_assert( #condition , msg, __VA_ARGS__ ))    \
-				debug_break();								       \
+	handle_assert( #condition , msg, __VA_ARGS__ )    			   \
     
 #elif PLATFORM_OSX
 
 #define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
-			if (handle_assert( #condition , msg, ##__VA_ARGS__ ))  \
-				debug_break();								       \
+	handle_assert( #condition , msg, ##__VA_ARGS__ )  			   \
 
 #endif
 
 #define ASSERT(condition) if ((condition) == false)   \
-			if (handle_assert( #condition, nullptr )) \
-				debug_break();						  \
+	handle_assert( #condition, nullptr ) 			  \
 
 constexpr bool C_ALWAYS_FAILS = false;
 

@@ -148,7 +148,7 @@ Array<u8> load_file(char const* path)
 	Option<u64> file_size_result = get_file_size(file_handle);
 	if (!file_size_result.has_value)
 	{
-		ASSERT_FAILED_MSG("Failed to read size of shader file %s", file_path.buffer)
+		ASSERT_FAILED_MSG("Failed to read size of shader file %s", file_path.buffer);
 		return shader_content;
 	}
     

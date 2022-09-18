@@ -4,6 +4,8 @@
 #include "array.h"
 #include "stdio.h"
 
+bool platform_is_debugger_present();
+
 struct String;
 struct OSX_Window_Impl;
 struct OSX_App_Impl;

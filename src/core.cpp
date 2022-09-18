@@ -47,7 +47,29 @@ char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...)
 	return result;
 }
 
-bool handle_assert(char const* condition, char const* msg, ...)
+void debug_break()
+{
+	#if PLATFORM_WIN32
+		__debugbreak();
+	#elif PLATFORM_OSX
+		__builtin_debugtrap();
+	#endif
+}
+
+bool debug_break_if_attached()
+{
+	if (platform_is_debugger_present())
+	{
+		debug_break();
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+void handle_assert(char const* condition, char const* msg, ...)
 {
 	// TODO(): Assert handling should be thread-safe and should block the frame end-point.
 
@@ -74,11 +96,14 @@ bool handle_assert(char const* condition, char const* msg, ...)
 
 	LOG("ASSERT HIT:\n%s", assert_msg);
 
-	// bool should_break = (IDYES == MessageBoxA(NULL, assert_msg, "Assert Failed! Break into code?", MB_YESNO | MB_ICONERROR));
-
-    bool should_break = message_box_yes_no("Assert Failed! Break into code?", assert_msg);
-    
-	return should_break;
+	if (platform_is_debugger_present())
+	{
+		debug_break();
+	}
+	else if (message_box_yes_no("Assert Failed! Break into debugger?", assert_msg))
+	{
+		debug_break();
+	}
 }
 
 void log_message(char const* fmt, ...)

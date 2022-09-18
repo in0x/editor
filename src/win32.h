@@ -282,4 +282,9 @@ Option<u64> read_file(File_Handle file, Array<u8>* buffer, u32 num_bytes)
     return result;
 }
 
+bool platform_is_debugger_present()
+{
+    return IsDebuggerPresent();
+}
+
 #endif // PLATFORM_WIN32

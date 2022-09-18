@@ -69,6 +69,11 @@ static void debug_break()
 	#endif
 }
 
+// NOTE(phil): Some day I should try debug breaking first, then throwing up the
+// message box if we're not attached or continued. I think that would speed up the workflow.
+
+#define __LOCATION_INFO__ "In: " __FILE__ "\nAt: " STRINGIFY(__LINE__) ", " __FUNCTION__ "() " 
+
 #if PLATFORM_WIN32
 #define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
 			if (handle_assert( #condition , msg, __VA_ARGS__ ))    \
@@ -120,5 +125,6 @@ struct String
 	u32 len = 0;
 };
 
+String alloc_string(u32 len);
 String alloc_string(char const* src);
 void free_string(String str);

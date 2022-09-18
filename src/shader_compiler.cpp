@@ -132,6 +132,7 @@ Array<u8> load_file(char const* path)
 	DEFER { log_last_platform_error(); };
 
 	String file_path = alloc_string(path);
+	DEFER { free_string(file_path); }; 
 
 	File_Handle file_handle = open_file(file_path);
 	DEFER { close_file(file_handle); };

@@ -107,6 +107,15 @@ void log_last_platform_error()
 #endif
 }
 
+String alloc_string(u32 len)
+{
+	String str;
+	str.len = len;
+    str.buffer = new char[str.len];
+
+	return str;
+}
+
 String alloc_string(char const* src)
 {
 	String str;

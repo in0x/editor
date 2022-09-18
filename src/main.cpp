@@ -19,7 +19,7 @@ static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, Vk
 
 	LOG("[VK] SEV: %s LAYER: %s MSG: %s", is_error ? "ERROR" : "WARNING", layer_prefix, message);
 
-	ASSERT(!is_error);
+	ASSERT_MSG(!is_error, "Vulkan Validation Error found!");
 
 	return VK_FALSE; // Spec states users should always return false here.
 }
@@ -51,10 +51,11 @@ int main(int argc, char** argv)
 {
     Platform_App platform_app = platform_create_app();
 
-	String root_dir;
+	String root_dir = alloc_string(MAX_PATH);
+	DEFER { free_string(root_dir); };
 	{
         bool success = platform_get_exe_path(&root_dir);
-        ASSERT_MSG(success, "Failed to get path to exe");
+        ASSERT_MSG(success, "Failed to get path to exe, got %s", root_dir.buffer ? root_dir.buffer : "{null}");
         
 		char* exe_path = strstr(root_dir.buffer, "editor");
 		exe_path += strlen("editor\\");
@@ -116,6 +117,7 @@ int main(int argc, char** argv)
             VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif PLATFORM_OSX
             VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
+			VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
 #endif
         };
 

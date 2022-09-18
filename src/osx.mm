@@ -6,9 +6,18 @@
 #import <Foundation/Foundation.h>
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <os/log.h>
 
 #include <mach-o/dyld.h>
 #include <assert.h>
+
+void platform_debug_print(char const* msg) // NOTE(): unused, left here in case I need to remember this API in the future.
+{
+    @autoreleasepool
+    {
+        os_log(OS_LOG_DEFAULT, "%{public}s", msg);
+    }
+}
 
 struct OSX_App_Impl
 {
@@ -279,10 +288,10 @@ Platform_App platform_create_app()
 
         // _glfwPollMonitorsCocoa();
 
-        if (![[NSRunningApplication currentApplication] isFinishedLaunching])
-        {
-            [NSApp run];
-        }
+        // if (![[NSRunningApplication currentApplication] isFinishedLaunching])
+        // {
+        //     [NSApp run];
+        // }
     }
 
     return app_wrapper;
@@ -407,7 +416,6 @@ bool message_box_yes_no(char const* title, char const* message)
     {
         NSAlert* alert = [[NSAlert alloc] init];
 
-
         NSString* ns_title = [NSString stringWithCString:title encoding:NSASCIIStringEncoding];
         NSString* ns_msg = [NSString stringWithCString:message encoding:NSASCIIStringEncoding];
 
@@ -425,6 +433,8 @@ bool message_box_yes_no(char const* title, char const* message)
 
 bool platform_get_exe_path(String* path)
 {
+    ASSERT(path->len > 0);
+
     u32 buffer_len = path->len;
     s32 retval = _NSGetExecutablePath(path->buffer, &buffer_len);
     if (retval == -1)

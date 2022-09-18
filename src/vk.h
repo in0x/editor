@@ -1,5 +1,9 @@
 #pragma once
 #include "core.h"
+
+#define VK_NO_PROTOTYPES
+#include <MoltenVK/mvk_vulkan.h>
+
 #include "volk/volk.h"
 
 constexpr u32 C_TARGET_VK_VERSION = VK_API_VERSION_1_2;

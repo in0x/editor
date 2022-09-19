@@ -87,14 +87,6 @@ int main(int argc, char** argv)
 		LOG("Root directory: \"%s\"", root_dir);
 	}
 
-	auto make_abs_path = [&root_dir](char const* rel_path, char* dst, u32 dst_size)
-	{
-		// TODO(): Itd be nice to make this into a path combine that guarantees delimiters
-		u32 num_written = snprintf(dst, dst_size, "%s%s", root_dir.buffer, rel_path);
-		ASSERT(num_written > 0);
-		dst[num_written] = '\0';
-	};
-
 	VK_CHECK(volkInitialize());
 
     // TODO(platform_port): Create window throught platform agnostic path
@@ -119,7 +111,13 @@ int main(int argc, char** argv)
     // SetForegroundWindow((HWND)main_window_handle);
     // UpdateWindow((HWND)main_window_handle);
 
-    Platform_Window main_window_handle = platform_create_window(platform_app);
+	Create_Window_Params window_params = {};
+	window_params.x = 0;
+	window_params.y = 0;
+	window_params.width = 1024;
+	window_params.height = 1024;
+
+    Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
     
     VkInstance vk_instance = VK_NULL_HANDLE;
 	{
@@ -392,12 +390,14 @@ int main(int argc, char** argv)
 
 	shader_compiler_init();
 
-    char shader_path[MAX_PATH];
-    
-    make_abs_path("src/shaders/triangle.vert.glsl", shader_path, MAX_PATH);
+    char shader_path[MAX_PATH] = "\0";
+    strcpy(shader_path, root_dir.buffer);
+	strcat(shader_path, "src/shaders/triangle.vert.glsl");
 	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, shader_path);
 
-    make_abs_path("src/shaders/triangle.frag.glsl", shader_path, MAX_PATH);
+    shader_path[0] = '\0';
+    strcpy(shader_path, root_dir.buffer);
+	strcat(shader_path, "src/shaders/triangle.frag.glsl");
 	VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, shader_path);
 	
 	// TODO(): Configure later

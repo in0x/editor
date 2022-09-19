@@ -14,6 +14,9 @@ constexpr u32 C_TARGET_VK_VERSION = VK_API_VERSION_1_2;
 		switch (result)				\
 		{							\
 			case VK_SUCCESS: break; \
+			case VK_TIMEOUT: break; \
+			case VK_NOT_READY: break; \
+			case VK_SUBOPTIMAL_KHR: break; \
 			case VK_ERROR_OUT_OF_HOST_MEMORY:    ASSERT_MSG(result == VK_SUCCESS, "Error OUT_OF_HOST_MEMORY (%d)", result);    \
 				break; \
 			case VK_ERROR_OUT_OF_DEVICE_MEMORY:  ASSERT_MSG(result == VK_SUCCESS, "Error OUT_OF_DEVICE_MEMORY (%d)", result);  \

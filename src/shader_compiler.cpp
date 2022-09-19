@@ -137,7 +137,7 @@ Array<u8> load_file(char const* path)
 	File_Handle file_handle = open_file(file_path);
 	DEFER { close_file(file_handle); };
 
-    Array<u8> shader_content;
+    Array<u8> shader_content;	
     
 	if (!is_file_valid(file_handle))
 	{

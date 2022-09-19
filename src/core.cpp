@@ -1,7 +1,7 @@
 #include "core.h"
 #include "platform.h"
 
-bool is_set(Print_Flags flags, Print_Flags val)
+static bool is_set(Print_Flags flags, Print_Flags val)
 {
     return u32(flags) & u32(val);
 }
@@ -145,8 +145,9 @@ String alloc_string(char const* src)
 {
 	String str;
 	str.len = strlen(src);
-    str.buffer = new char[str.len];
+    str.buffer = new char[str.len + 1];
     memcpy(str.buffer, src, str.len);
+	str.buffer[str.len] = '\0';
 
 	return str;
 }

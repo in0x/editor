@@ -1,22 +1,13 @@
 #version 450
 
-struct Vertex
+const vec3 vertices[] = 
 {
-	vec3 pos;
-	vec3 nml;
+	vec3(0, 0.5, 0),
+	vec3(0.5, -0.5, 0),
+	vec3(-0.5, -0.5, 0),
 };
-
-layout(binding = 0) readonly buffer Vertices
-{
-	Vertex vertices[];
-};
-
-layout(location = 0) out vec4 color;
 
 void main()
 {
-	Vertex v = vertices[gl_VertexIndex];
-	gl_Position = vec4(v.pos + vec3(0, 0, 0.5), 1.0);
-
-	color = vec4(v.nml * 0.5 + vec3(0.5), 1.0);
+	gl_Position = vec4(vertices[gl_VertexIndex], 1.0);
 }

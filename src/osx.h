@@ -23,7 +23,15 @@ struct Platform_Window
     OSX_Window_Impl* impl;
 };
 
-Platform_Window platform_create_window(Platform_App app);
+struct Create_Window_Params
+{
+    u32 x;
+    u32 y;
+    u32 width;
+    u32 height;
+};
+
+Platform_Window platform_create_window(Platform_App app, Create_Window_Params params);
 bool platform_window_closing(Platform_Window window);
 void platform_destroy_window(Platform_Window window);
 void* platform_window_get_raw_handle(Platform_Window window);

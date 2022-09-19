@@ -339,7 +339,7 @@ void platform_destroy_app(Platform_App app)
     delete app.impl;
 }
 
-Platform_Window platform_create_window(Platform_App app)
+Platform_Window platform_create_window(Platform_App app, Create_Window_Params params)
 {
     Platform_Window window_wrapper = {};
     window_wrapper.impl = new OSX_Window_Impl;
@@ -350,7 +350,7 @@ Platform_Window platform_create_window(Platform_App app)
         window->delegate = [[WindowDelegate alloc] init:window];
         assert(window->delegate != nil);
 
-        NSRect windowRect = NSMakeRect(0, 0, 500, 500);
+        NSRect windowRect = NSMakeRect(params.x, params.y, params.width, params.height);
 
         NSUInteger windowStyle = NSWindowStyleMaskMiniaturizable |
                                NSWindowStyleMaskTitled |
@@ -496,7 +496,9 @@ File_Handle open_file(String path)
     }
     else
     {
-        ASSERT_FAILED_MSG("Failed to open file '%s'", path.buffer);
+
+        // ASSERT_FAILED_MSG("Failed to open file '%s': %s", path.buffer, strerror(errno));
+        ASSERT_FAILED_MSG("Failed to open file %s", strerror(errno));
     }
 
     return file;

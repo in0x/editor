@@ -548,7 +548,7 @@ int main(int argc, char** argv)
 			0, 0, 0, 0, 1, 
 			&render_begin_barrier);
 
-		VkClearColorValue color = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1 };
+		VkClearColorValue color = { {48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f} };
 		VkClearValue clear_color = { color };
 
 		VkRenderPassBeginInfo pass_begin_info = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
@@ -649,6 +649,8 @@ int main(int argc, char** argv)
     platform_destroy_window(main_window_handle);
     platform_destroy_app(platform_app);
     
+	LOG("Engine shutdown complete.");
+
     return 0;
 }
 #endif

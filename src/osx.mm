@@ -154,6 +154,29 @@ struct OSX_Window_Impl
     return self;
 }
 
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange
+{
+    // NO-OP to statisfy compiler
+}
+
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+    // NO-OP to statisfy compiler
+    return nullptr;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+    // NO-OP to statisfy compiler
+    return NSMakeRect(0, 0, 0, 0);
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+    // NO-OP to statisfy compiler
+    return 0;
+}
+
 // - (void)dealloc
 // {
 //     [trackingArea release];
@@ -461,7 +484,9 @@ bool message_box_yes_no(char const* title, char const* message)
 
         NSButton* yes_button = [alert addButtonWithTitle:@"Yes"];
         NSButton* no_button  = [alert addButtonWithTitle:@"No"];
-        
+        UNUSED_VAR(yes_button);
+        UNUSED_VAR(no_button);
+
         NSModalResponse response = [alert runModal];
 
         return (response == NSAlertFirstButtonReturn);

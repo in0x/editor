@@ -312,16 +312,6 @@ int main(int argc, char** argv)
 		}
 	}
 
-	VkSemaphore acq_semaphore = VK_NULL_HANDLE;
-	VkSemaphore rel_semaphore = VK_NULL_HANDLE;
-	{
-		VkSemaphoreCreateInfo create_info = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-		VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &acq_semaphore));
-		VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &rel_semaphore));
-		VK_ASSERT_VALID(acq_semaphore);
-		VK_ASSERT_VALID(rel_semaphore);
-	}
-
 	VkQueue vk_queue = VK_NULL_HANDLE;
 	vkGetDeviceQueue(vk_device, family_idx, 0, &vk_queue);
 
@@ -386,6 +376,8 @@ int main(int argc, char** argv)
 		VkSemaphoreCreateInfo create_info = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &img_acq_semaphore));
 		VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &img_rel_semaphore));
+		VK_ASSERT_VALID(img_acq_semaphore);
+		VK_ASSERT_VALID(img_rel_semaphore);
 	}
 
 	shader_compiler_init();
@@ -531,7 +523,7 @@ int main(int argc, char** argv)
 
 		u32 img_idx = 0;
 		u64 const max_timeout = ~0ull;
-		VK_CHECK(vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, acq_semaphore, VK_NULL_HANDLE, &img_idx));
+		VK_CHECK(vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore, VK_NULL_HANDLE, &img_idx));
 
 		VkCommandPoolResetFlags pool_reset_flags = 0;
 		VK_CHECK(vkResetCommandPool(vk_device, vk_cmd_pool, pool_reset_flags));
@@ -601,18 +593,18 @@ int main(int argc, char** argv)
 
 		VkSubmitInfo submit_info = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		submit_info.waitSemaphoreCount = 1;
-		submit_info.pWaitSemaphores = &acq_semaphore;
+		submit_info.pWaitSemaphores = &img_acq_semaphore;
 		submit_info.pWaitDstStageMask = &submit_stage_mask;
 		submit_info.commandBufferCount = 1;
 		submit_info.pCommandBuffers = &vk_cmd_buffer;
 		submit_info.signalSemaphoreCount = 1;
-		submit_info.pSignalSemaphores = &rel_semaphore;
+		submit_info.pSignalSemaphores = &img_rel_semaphore;
 
 		vkQueueSubmit(vk_queue, 1, &submit_info, VK_NULL_HANDLE);
 
 		VkPresentInfoKHR present_info = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		present_info.waitSemaphoreCount = 1;
-		present_info.pWaitSemaphores = &rel_semaphore;
+		present_info.pWaitSemaphores = &img_rel_semaphore;
 		present_info.swapchainCount = 1;
 		present_info.pSwapchains = &vk_swapchain;
 		present_info.pImageIndices = &img_idx;
@@ -622,13 +614,39 @@ int main(int argc, char** argv)
 		VK_CHECK(vkDeviceWaitIdle(vk_device));
     }
     
-    platform_destroy_window(main_window_handle);
-    
 	shader_compiler_shutdown();
+
+	vkDestroyShaderModule(vk_device, vert_shader, nullptr);
+	vkDestroyShaderModule(vk_device, frag_shader, nullptr);
+
+	vkDestroyPipelineLayout(vk_device, triangle_layout, nullptr);
+	vkDestroyPipeline(vk_device, triangle_pipeline, nullptr);
+
+	vkDestroySemaphore(vk_device, img_acq_semaphore, nullptr);
+	vkDestroySemaphore(vk_device, img_rel_semaphore, nullptr);
+
+	vkDestroyRenderPass(vk_device, vk_render_pass, nullptr);
+	vkDestroyCommandPool(vk_device, vk_cmd_pool, nullptr);
+
+	for (u32 i = 0; i < swapchain_image_count; ++i)
+	{
+		vkDestroyFramebuffer(vk_device, swapchain_framebuffers[i], nullptr);
+	}
+
+	for (u32 i = 0; i < swapchain_image_count; ++i)
+	{
+		vkDestroyImageView(vk_device, swapchain_image_views[i], nullptr);
+	}
+
+	vkDestroySwapchainKHR(vk_device, vk_swapchain, nullptr);
+	vkDestroySurfaceKHR(vk_instance, vk_surface, nullptr);
+
+	vkDestroyDevice(vk_device, nullptr);
 
     vkDestroyDebugReportCallbackEXT(vk_instance, vk_dbg_callback, nullptr);
     vkDestroyInstance(vk_instance, nullptr);
 
+    platform_destroy_window(main_window_handle);
     platform_destroy_app(platform_app);
     
     return 0;

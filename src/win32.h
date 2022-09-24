@@ -252,7 +252,7 @@ Option<u64> get_file_size(File_Handle file)
     LARGE_INTEGER file_size;
 	if (GetFileSizeEx(file.handle, &file_size))
 	{
-        option_set(&result, file_size.QuadPart;
+        option_set(&result, file_size.QuadPart);
     }
 
     return result;

@@ -54,16 +54,6 @@ struct DeferredFunction
 
 #define DEFER DeferredFunction const UNIQUE_ID(_scope_exit) = [&] 
 
-enum class Print_Flags : u8
-{
-	NONE = 0,
-	APPEND_NEWLINE = 0x1,
-};
-
-// NOTE(): Returned pointer must be deleted by caller.
-char const* inplace_printf(char const* fmt, Print_Flags flags, va_list args);
-char const* va_inplace_printf(char const* fmt, Print_Flags flags, ...);
-
 void handle_assert(char const* condition, char const* msg, ...);
 
 #define __LOCATION_INFO__ "In: " __FILE__ "\nAt: " STRINGIFY(__LINE__) ", " __FUNCTION__ "() " 

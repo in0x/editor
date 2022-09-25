@@ -1,4 +1,5 @@
 #include "core.h"
+#include "memory.h"
 #include "platform.h"
 #include "vk.h"
 #include "shader_compiler.h"
@@ -72,15 +73,18 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nC
 #else
 int main(int argc, char** argv)
 {
+	Arena program_arena = arena_allocate(1024 * 1024); // Give ourselves one MiB of main memory.
+	DEFER { arena_free(&program_arena); };
+	
     Platform_App platform_app = platform_create_app();
 
-	String root_dir = alloc_string(MAX_PATH);
-	DEFER { free_string(root_dir); };
+	char root_dir[MAX_PATH];
 	{
-        bool success = platform_get_exe_path(&root_dir);
-        ASSERT_MSG(success, "Failed to get path to exe, got %s", root_dir.buffer ? root_dir.buffer : "{null}");
+		String dir_string{ root_dir, MAX_PATH };
+        bool success = platform_get_exe_path(&dir_string);
+        ASSERT_MSG(success, "Failed to get path to exe, got %s", root_dir);
         
-		char* exe_path = strstr(root_dir.buffer, "editor");
+		char* exe_path = strstr(root_dir, "editor");
 		exe_path += strlen("editor/");
 		*exe_path = '\0';
 
@@ -89,33 +93,13 @@ int main(int argc, char** argv)
 
 	VK_CHECK(volkInitialize());
 
-    // TODO(platform_port): Create window throught platform agnostic path
-    // and extract window handle for vulkan
-    
-    // Create_Window_Params window_params = {};
-    // window_params.x = 50;
-    // window_params.y = 50;
-    // window_params.width  = 800;
-    // window_params.height = 800;
-    // window_params.class_name = L"editor_window_class";
-    // window_params.title = L"Editor";
-
-    // HWND main_window_handle = create_window(&window_params);
-        
-    // if (main_window_handle == INVALID_HANDLE_VALUE)
-    // {
-    //     return -1;
-    // }
-
-    // ShowWindow((HWND)main_window_handle, SW_SHOW);
-    // SetForegroundWindow((HWND)main_window_handle);
-    // UpdateWindow((HWND)main_window_handle);
-
 	Create_Window_Params window_params = {};
 	window_params.x = 0;
 	window_params.y = 0;
 	window_params.width = 1024;
 	window_params.height = 1024;
+    // window_params.class_name = L"editor_window_class";
+    // window_params.title = L"Editor";
 
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
     
@@ -383,14 +367,14 @@ int main(int argc, char** argv)
 	shader_compiler_init();
 
     char shader_path[MAX_PATH] = "\0";
-    strcpy(shader_path, root_dir.buffer);
+    strcpy(shader_path, root_dir);
 	strcat(shader_path, "src/shaders/triangle.vert.glsl");
-	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, shader_path);
+	VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, String{ shader_path, MAX_PATH }, &program_arena);
 
     shader_path[0] = '\0';
-    strcpy(shader_path, root_dir.buffer);
+    strcpy(shader_path, root_dir);
 	strcat(shader_path, "src/shaders/triangle.frag.glsl");
-	VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, shader_path);
+	VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, String{ shader_path, MAX_PATH }, &program_arena);
 	
 	// TODO(): Configure later
 	VkPipelineCache pipeline_cache = VK_NULL_HANDLE;	

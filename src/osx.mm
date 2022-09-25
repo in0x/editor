@@ -1,6 +1,7 @@
 #include "osx.h"
 
 #include "core.h"
+#include "memory.h"
 #include "stdio.h"
 
 #import <Foundation/Foundation.h>
@@ -513,20 +514,15 @@ bool is_file_valid(File_Handle handle)
 
 File_Handle open_file(String path)  
 {
-    File_Handle file = {};
-    file.handle = fopen(path.buffer, "r");
-    if (file.handle)
+    if (FILE* handle = fopen(path.buffer, "r"))
     {
-        file.path = alloc_string(path.buffer);
+        return File_Handle { handle };
     }
     else
     {
-
-        // ASSERT_FAILED_MSG("Failed to open file '%s': %s", path.buffer, strerror(errno));
-        ASSERT_FAILED_MSG("Failed to open file %s", strerror(errno));
+        ASSERT_FAILED_MSG("Failed to open file '%s': %s", path.buffer, strerror(errno));
+        return File_Handle {};
     }
-
-    return file;
 }
 
 void close_file(File_Handle file)
@@ -535,8 +531,6 @@ void close_file(File_Handle file)
     {
         fclose(file.handle);
     }
-
-    free_string(file.path);
 }
 
 Option<u64> get_file_size(File_Handle file)
@@ -561,24 +555,20 @@ Option<u64> get_file_size(File_Handle file)
     return result;
 }
 
-Option<u64> read_file(File_Handle file, Array<u8>* buffer, u32 num_bytes)
+Option<u64> read_file(File_Handle file, Slice dst, u64 num_bytes)
 {
-    Option<u64> result;
-
+    Option<u64> result = {};
     if (!is_file_valid(file))
     {
         return result;
     }
     
-    array_set_count(buffer, num_bytes);
-
-    u64 bytes_read = fread(buffer->data, 1, num_bytes, file.handle);
+    u64 bytes_read = fread(dst.buffer, 1, num_bytes, file.handle);
     if (bytes_read != num_bytes)
     {
         LOG("Did not read expected number of bytes from file: expected=%llu, actual=%llu", num_bytes, bytes_read);
     }
 
     option_set(&result, bytes_read);
-
     return result;
 }

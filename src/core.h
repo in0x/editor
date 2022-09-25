@@ -105,7 +105,3 @@ struct String
 	char* buffer = nullptr;
 	u32 len = 0;
 };
-
-String alloc_string(u32 len);
-String alloc_string(char const* src);
-void free_string(String str);

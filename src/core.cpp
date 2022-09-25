@@ -137,28 +137,3 @@ void log_last_platform_error()
 	}
 #endif
 }
-
-String alloc_string(u32 len)
-{
-	String str;
-	str.len = len;
-    str.buffer = new char[str.len];
-
-	return str;
-}
-
-String alloc_string(char const* src)
-{
-	String str;
-	str.len = strlen(src);
-    str.buffer = new char[str.len + 1];
-    memcpy(str.buffer, src, str.len);
-	str.buffer[str.len] = '\0';
-
-	return str;
-}
-
-void free_string(String str)
-{
-	delete[] str.buffer;
-}

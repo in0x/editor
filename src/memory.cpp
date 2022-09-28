@@ -3,9 +3,10 @@
 Arena arena_allocate(u64 capacity)
 {
     Arena result = {};
-    result.buffer = (u8*)malloc(capacity);
+    result.buffer = malloc(capacity);
     result.capacity = capacity;
     result.bytes_allocated = 0;
+    memset(result.buffer, 0, result.bytes_allocated);
     return result;
 }
 
@@ -25,6 +26,7 @@ Mark arena_mark(Arena* arena)
 void arena_clear_to_mark(Arena* arena, Mark mark)
 {
     arena->bytes_allocated = mark.position;
+    memset((u8*)arena->buffer + arena->bytes_allocated, 0, mark.position - arena->bytes_allocated);
 }
 
 Slice arena_push(Arena* arena, u64 num_bytes)
@@ -44,21 +46,16 @@ Slice arena_push(Arena* arena, u64 num_bytes)
     return result;
 }
 
-void arena_pop(Arena* arena, Slice allocation)
+Slice arena_push_a(Arena* arena, u64 num_bytes, u64 alignment)
 {
-    // TODO(): I dont think we need to carry the parent pointer to verify this.
-    // But it might be useful for other validation, have to evaluate further.
-    if (arena != allocation.parent)
-    {
-        ASSERT(arena == allocation.parent);
-        return;
-    }
+    u64 mask = alignment - 1;
+    ASSERT((alignment > 0) && ((alignment & mask) == 0));
 
-    if ((arena->buffer + arena->bytes_allocated) != allocation.buffer)
-    {
-        ASSERT_FAILED_MSG("Tried to pop an allocation from arena that was not the most recent.");
-        return;
-    }
+    // Check how many bytes extra we need to so we can align the address of arena top
+    u64 misalignment = (uintptr_t(arena->buffer) + arena->bytes_allocated) % alignment;
+    Slice allocation = arena_push(arena, num_bytes + misalignment);
 
-    arena->bytes_allocated -= allocation.size;
+    // Align the allocated pointer
+    allocation.buffer += misalignment;
+    return allocation;
 }

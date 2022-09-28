@@ -186,8 +186,7 @@ glslang_target_client_version_t map_version(u32 val)
 
 VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, String src_path, Arena* arena)
 {
-	Mark arena_top = arena_mark(arena);
-	DEFER { arena_clear_to_mark(arena, arena_top); };
+	ARENA_DEFER_CLEAR(arena);
 
 	Slice shader_code = load_file(src_path, arena);
 	if (!shader_code.is_valid())
@@ -250,10 +249,9 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 
 	glslang_program_SPIRV_generate(program, input.stage);
 	size_t byte_code_size = glslang_program_SPIRV_get_size(program);
-	u32* byte_code = new u32[byte_code_size];
-	DEFER{ delete[] byte_code; };
+	ArraySlice<u32> byte_code = arena_push_array<u32>(arena, byte_code_size);
 
-	glslang_program_SPIRV_get(program, byte_code);
+	glslang_program_SPIRV_get(program, byte_code.m_array);
 
 	{
 		char const* spirv_messages = glslang_program_SPIRV_get_messages(program);
@@ -265,7 +263,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 
 	VkShaderModuleCreateInfo create_info = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
 	create_info.codeSize = byte_code_size * sizeof(u32);
-	create_info.pCode = byte_code;
+	create_info.pCode = byte_code.m_array;
 
 	VkShaderModule vk_shader = VK_NULL_HANDLE;
 	VK_CHECK(vkCreateShaderModule(vk_device, &create_info, nullptr, &vk_shader));

@@ -25,14 +25,15 @@ static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, Vk
 	return VK_FALSE; // Spec states users should always return false here.
 }
 
-u32 get_gfx_family_index(VkPhysicalDevice phys_device)
+u32 get_gfx_family_index(VkPhysicalDevice phys_device, Arena* arena)
 {
+	ARENA_DEFER_CLEAR(arena);
+
 	u32 queue_count = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, nullptr);
 
-	VkQueueFamilyProperties* queue_props = new VkQueueFamilyProperties[queue_count];
-	DEFER{ delete[] queue_props; };
-	vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props);
+	ArraySlice<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(arena, queue_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props.m_array);
 
 	for (u32 i = 0; i < queue_count; ++i)
 	{
@@ -168,7 +169,7 @@ int main(int argc, char** argv)
 
 			LOG("Enumerating GPU %s", props.deviceName);
 			
-			u32 family_idx = get_gfx_family_index(phys_devices[i]);
+			u32 family_idx = get_gfx_family_index(phys_devices[i], &program_arena);
 			if (family_idx == VK_QUEUE_FAMILY_IGNORED)
 			{
 				continue;
@@ -204,7 +205,7 @@ int main(int argc, char** argv)
 	}
 	ASSERT_MSG(vk_phys_device != VK_NULL_HANDLE, "No valid GPU device found!");
 	
-	u32 family_idx = get_gfx_family_index(vk_phys_device);
+	u32 family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
 	ASSERT(family_idx != VK_QUEUE_FAMILY_IGNORED);
 
 	VkDevice vk_device = VK_NULL_HANDLE;
@@ -266,13 +267,13 @@ int main(int argc, char** argv)
 
 	VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
 	{
+		ARENA_DEFER_CLEAR(&program_arena);
+
 		u32 fmt_count = 0;
 		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
 
-		VkSurfaceFormatKHR* fmts = new VkSurfaceFormatKHR[fmt_count];
-		DEFER{ delete[] fmts; };
-
-		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts));
+		ArraySlice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(&program_arena, fmt_count);
+		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.m_array));
 		
 		if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
 		{

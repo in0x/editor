@@ -4,25 +4,69 @@
 #include "vk.h"
 #include "shader_compiler.h"
 
-// TODO(phil):
-// 1) move the rest of the windows code from here into win32.h
-// 2) swap out win32 window for osx window
-// 3) get the code compiling under clang
-// 4) get the code linking with vulkan
-// 5) get the window handle from the platform window and feed it to vulkan
-// 6) get the triangle rendering again
-
+#define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
+	if (condition) { ASSERT_FAILED_MSG(fmt_string, __VA_ARGS__); } \
+	else { LOG(fmt_string, __VA_ARGS__); } \
 
 static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type, 
 	u64 object, size_t location, s32 message_code, char const* layer_prefix, char const* message, void* user_data)
 {
 	bool is_error = flags & VK_DEBUG_REPORT_ERROR_BIT_EXT;
-
-	LOG("[VK] SEV: %s LAYER: %s MSG: %s", is_error ? "ERROR" : "WARNING", layer_prefix, message);
-
-	ASSERT_MSG(!is_error, "Vulkan Validation Error found!");
+	ASSERT_IF_ERROR_ELSE_LOG(
+		is_error,
+		"[VK] SEV: %s LAYER: %s | MSG: %s", 
+		is_error ? "ERROR" : "WARNING", layer_prefix, message
+	);
 
 	return VK_FALSE; // Spec states users should always return false here.
+}
+
+static VkBool32 VKAPI_CALL debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_sev, VkDebugUtilsMessageTypeFlagsEXT msg_type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
+{
+	char const* msg_type_name = nullptr;
+	switch (msg_type) {
+		case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT: // Some event has happened that is unrelated to the specification or performance 
+			msg_type_name = "General"; break;
+		case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT: // Something has happened that violates the specification or indicates a possible mistake
+			msg_type_name = "Validation"; break;
+		case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT: // Potential non-optimal use of Vulkan 
+			msg_type_name = "Perf"; break;
+		case VK_DEBUG_UTILS_MESSAGE_TYPE_FLAG_BITS_MAX_ENUM_EXT: // MoltenVK sends messages of this kind
+			msg_type_name = "MoltenVK"; break;
+		default: {
+			msg_type_name = "Unkown Message Type";
+			ASSERT_FAILED_MSG("Unhandled vulkan debug message type");
+			break;
+		}
+	}
+
+	char const* msg_sev_name = nullptr;
+	switch (msg_sev) {
+    	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+			msg_sev_name = "Verbose"; break;
+    	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+			msg_sev_name = "Info"; break;
+    	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+			msg_sev_name = "Warning"; break;
+    	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+			msg_sev_name = "Error"; break;
+		default: {
+			msg_sev_name = "Unknown Verbosity";
+			ASSERT_FAILED_MSG("Unhandled vulkan verbosity type");
+			break;
+		}
+	}
+
+	ASSERT_IF_ERROR_ELSE_LOG(
+		msg_sev == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		"[VK %s] Sev: %s | Msg: %s", 
+		msg_type_name, 
+		msg_sev_name,
+		callback_data->pMessage
+	);
+
+	return VK_FALSE; // Users should always return false according to spec.
 }
 
 u32 get_gfx_family_index(VkPhysicalDevice phys_device, Arena* arena)
@@ -120,12 +164,12 @@ int main(int argc, char** argv)
 
         char const* extensions[] = {
             VK_KHR_SURFACE_EXTENSION_NAME,
+			VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 		    VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
 #if PLATFORM_WIN32
             VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif PLATFORM_OSX
             VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
-			// VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
 			VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 #endif
         };
@@ -139,6 +183,7 @@ int main(int argc, char** argv)
 	
     volkLoadInstanceOnly(vk_instance);
 
+#define DEBUG_BUILD 1
 #if DEBUG_BUILD
 	VkDebugReportCallbackEXT vk_dbg_callback = VK_NULL_HANDLE;
 	{
@@ -149,6 +194,24 @@ int main(int argc, char** argv)
 		VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &create_info, nullptr, &vk_dbg_callback));
 	}
     ASSERT(vk_dbg_callback != VK_NULL_HANDLE);
+
+	VkDebugUtilsMessengerEXT vk_debug_messenger = VK_NULL_HANDLE;
+	{
+		VkDebugUtilsMessengerCreateInfoEXT create_info = {};
+		create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		create_info.messageSeverity = 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		create_info.messageType = 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		create_info.pfnUserCallback = debug_message_callback;
+
+		VK_CHECK(vkCreateDebugUtilsMessengerEXT(vk_instance, &create_info, nullptr, &vk_debug_messenger));
+	}
+	ASSERT(vk_debug_messenger != VK_NULL_HANDLE);
 #endif // DEBUG_BUILD
 
 	// Create vkDevice
@@ -628,6 +691,7 @@ int main(int argc, char** argv)
 
 	vkDestroyDevice(vk_device, nullptr);
 
+	vkDestroyDebugUtilsMessengerEXT(vk_instance, vk_debug_messenger, nullptr);
     vkDestroyDebugReportCallbackEXT(vk_instance, vk_dbg_callback, nullptr);
     vkDestroyInstance(vk_instance, nullptr);
 

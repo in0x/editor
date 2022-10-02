@@ -10,7 +10,7 @@ Arena arena_allocate(u64 capacity)
     return result;
 }
 
-void arena_free(Arena* arena)
+void arena_free(Arena *arena)
 {
     ASSERT(arena->buffer != nullptr);
     free(arena->buffer);
@@ -18,35 +18,35 @@ void arena_free(Arena* arena)
     arena->capacity = 0;
 }
 
-Mark arena_mark(Arena* arena)
+Mark arena_mark(Arena *arena)
 {
-    return Mark { arena->bytes_allocated };
+    return Mark{arena->bytes_allocated};
 }
 
-void arena_clear_to_mark(Arena* arena, Mark mark)
+void arena_clear_to_mark(Arena *arena, Mark mark)
 {
     arena->bytes_allocated = mark.position;
-    memset((u8*)arena->buffer + arena->bytes_allocated, 0, mark.position - arena->bytes_allocated);
+    memset((u8 *)arena->buffer + arena->bytes_allocated, 0, mark.position - arena->bytes_allocated);
 }
 
-Slice arena_push(Arena* arena, u64 num_bytes)
+Slice arena_push(Arena *arena, u64 num_bytes)
 {
     if ((arena->bytes_allocated + num_bytes) > arena->capacity)
     {
         ASSERT_FAILED_MSG("Tried to allocate beyond arena capacity.");
-        return Slice {};
+        return Slice{};
     }
 
     arena->bytes_allocated += num_bytes;
 
     Slice result = {};
-    result.buffer = (u8*)arena->buffer;
+    result.buffer = (u8 *)arena->buffer;
     result.parent = arena;
     result.size = num_bytes;
     return result;
 }
 
-Slice arena_push_a(Arena* arena, u64 num_bytes, u64 alignment)
+Slice arena_push_a(Arena *arena, u64 num_bytes, u64 alignment)
 {
     u64 mask = alignment - 1;
     ASSERT((alignment > 0) && ((alignment & mask) == 0));

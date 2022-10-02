@@ -1,6 +1,6 @@
 #pragma once
-#include "stdint.h"
 #include "stdarg.h"
+#include "stdint.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -17,17 +17,17 @@ using f32 = float;
 using f64 = double;
 
 #if defined(WIN32)
-	#define PLATFORM_WIN32 1
-	#define PLATFORM_OSX 0
+#define PLATFORM_WIN32 1
+#define PLATFORM_OSX 0
 #elif defined(__APPLE__)
-	#define PLATFORM_WIN32 0
-	#define PLATFORM_OSX 1
+#define PLATFORM_WIN32 0
+#define PLATFORM_OSX 1
 #endif
 
 #if PLATFORM_WIN32
-	#define FORCEINLINE __forceinline
+#define FORCEINLINE __forceinline
 #elif PLATFORM_OSX
-	#define FORCEINLINE __attribute__((always_inline))
+#define FORCEINLINE __attribute__((always_inline))
 #endif
 
 #define UNUSED_VAR(x) (void)x
@@ -38,7 +38,7 @@ using f64 = double;
 #define DEBUG_BUILD 0
 #endif
 
-#define CONCAT_INNER(l, r) l ## r
+#define CONCAT_INNER(l, r) l##r
 #define CONCAT(l, r) CONCAT_INNER(l, r)
 
 #define UNIQUE_ID(x) CONCAT(x, __COUNTER__)
@@ -51,50 +51,54 @@ using f64 = double;
 template <typename T>
 struct DeferredFunction
 {
-	DeferredFunction(T&& closure)
-		: closure(static_cast<T&&>(closure))
-	{}
+    DeferredFunction(T&& closure)
+        : closure(static_cast<T&&>(closure))
+    {
+    }
 
-	~DeferredFunction()
-	{
-		closure();
-	}
+    ~DeferredFunction()
+    {
+        closure();
+    }
 
-	T closure;
+    T closure;
 };
 
-#define DEFER DeferredFunction const UNIQUE_ID(_scope_exit) = [&] 
+#define DEFER DeferredFunction const UNIQUE_ID(_scope_exit) = [&]
 
 void handle_assert(char const* condition, char const* msg, ...);
 
-#define __LOCATION_INFO__ "In: " __FILE__ "\nAt: " STRINGIFY(__LINE__) ", " __FUNCTION__ "() " 
+#define __LOCATION_INFO__ "In: " __FILE__ "\nAt: " STRINGIFY(__LINE__) ", " __FUNCTION__ "() "
 
 #if PLATFORM_WIN32
-#define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
-	handle_assert( #condition , msg, __VA_ARGS__ )    			   \
-    
+#define ASSERT_MSG(condition, msg, ...) \
+    if ((condition) == false)           \
+    handle_assert(#condition, msg, __VA_ARGS__)
+
 #elif PLATFORM_OSX
 
-#define ASSERT_MSG(condition, msg, ...) if ((condition) == false)  \
-	handle_assert( #condition , msg, ##__VA_ARGS__ )  			   \
+#define ASSERT_MSG(condition, msg, ...) \
+    if ((condition) == false)           \
+    handle_assert(#condition, msg, ##__VA_ARGS__)
 
 #endif
 
-#define ASSERT(condition) if ((condition) == false)   \
-	handle_assert( #condition, nullptr ) 			  \
+#define ASSERT(condition)     \
+    if ((condition) == false) \
+    handle_assert(#condition, nullptr)
 
 constexpr bool C_ALWAYS_FAILS = false;
 
-#define ASSERT_FAILED_MSG(msg, ...) ASSERT_MSG(C_ALWAYS_FAILS, msg, ## __VA_ARGS__)
+#define ASSERT_FAILED_MSG(msg, ...) ASSERT_MSG(C_ALWAYS_FAILS, msg, ##__VA_ARGS__)
 
 void log_message(char const* fmt, ...);
 
-#define LOG(fmt, ...) log_message(fmt, ## __VA_ARGS__);
+#define LOG(fmt, ...) log_message(fmt, ##__VA_ARGS__);
 
 void log_last_platform_error();
 
 #if PLATFORM_OSX
-    #define MAX_PATH 260
+#define MAX_PATH 260
 #endif
 
 template <typename T>
@@ -107,12 +111,12 @@ struct Option
 template <typename T>
 void option_set(Option<T>* option, T value)
 {
-    option->value     = value;
+    option->value = value;
     option->has_value = true;
 }
 
 struct String
 {
-	char* buffer = nullptr;
-	u32 len = 0;
+    char* buffer = nullptr;
+    u32 len = 0;
 };

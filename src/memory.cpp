@@ -25,8 +25,8 @@ Mark arena_mark(Arena *arena)
 
 void arena_clear_to_mark(Arena *arena, Mark mark)
 {
+    memset((u8 *)arena->buffer + mark.position, 0, arena->bytes_allocated - mark.position);
     arena->bytes_allocated = mark.position;
-    memset((u8 *)arena->buffer + arena->bytes_allocated, 0, mark.position - arena->bytes_allocated);
 }
 
 Slice arena_push(Arena *arena, u64 num_bytes)
@@ -37,12 +37,12 @@ Slice arena_push(Arena *arena, u64 num_bytes)
         return Slice{};
     }
 
-    arena->bytes_allocated += num_bytes;
-
     Slice result = {};
-    result.buffer = (u8 *)arena->buffer;
+    result.buffer = (u8 *)arena->buffer + arena->bytes_allocated;
     result.parent = arena;
     result.size = num_bytes;
+
+    arena->bytes_allocated += num_bytes;
     return result;
 }
 

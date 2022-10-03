@@ -129,6 +129,186 @@ VkImageMemoryBarrier create_image_barrier(
     return result;
 }
 
+static VkInstance create_vk_instance()
+{
+    VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    app_info.apiVersion = C_TARGET_VK_VERSION;
+
+    VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    create_info.pApplicationInfo = &app_info;
+
+#if DEBUG_BUILD
+    char const *debug_layers[] = {"VK_LAYER_KHRONOS_validation"};
+    create_info.ppEnabledLayerNames = debug_layers;
+    create_info.enabledLayerCount = ARRAYSIZE(debug_layers);
+#endif
+
+    char const *extensions[] = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+#if PLATFORM_WIN32
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#elif PLATFORM_OSX
+        VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+#endif
+    };
+
+    create_info.ppEnabledExtensionNames = extensions;
+    create_info.enabledExtensionCount = ARRAYSIZE(extensions);
+
+    VkInstance vk_instance = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateInstance(&create_info, nullptr, &vk_instance));
+    return vk_instance;
+}
+
+static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, Arena* arena)
+{
+    u32 phys_device_count = 0;
+    VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, nullptr));
+
+    ARENA_DEFER_CLEAR(arena);
+    ArraySlice<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(arena, phys_device_count);
+
+    VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices.m_array));
+
+    VkPhysicalDevice discrete_gpu = VK_NULL_HANDLE;
+    VkPhysicalDevice fallback_gpu = VK_NULL_HANDLE;
+
+    for (u32 i = 0; i < phys_device_count; ++i)
+    {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(phys_devices[i], &props);
+
+        LOG("Enumerating GPU %s", props.deviceName);
+
+        u32 family_idx = get_gfx_family_index(phys_devices[i], arena);
+        if (family_idx == VK_QUEUE_FAMILY_IGNORED)
+        {
+            continue;
+        }
+
+#if PLATFORM_WIN32
+        if (!vkGetPhysicalDeviceWin32PresentationSupportKHR(phys_devices[i], family_idx))
+        {
+            continue;
+        }
+#endif
+        // According to spec: "On macOS, all physical devices and queue families must be capable of
+        // presentation with any layer. As a result there is no macOS-specific query for these
+        // capabilities."
+
+        if (!discrete_gpu)
+        {
+            if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            {
+                discrete_gpu = phys_devices[i];
+                LOG("Found discrete GPU %s", props.deviceName);
+            }
+        }
+
+        if (!fallback_gpu)
+        {
+            fallback_gpu = phys_devices[i];
+            LOG("Found fallback GPU %s", props.deviceName);
+        }
+    }
+
+    VkPhysicalDevice vk_phys_device = VK_NULL_HANDLE;
+    vk_phys_device = discrete_gpu ? discrete_gpu : fallback_gpu;
+    ASSERT_MSG(vk_phys_device != VK_NULL_HANDLE, "No valid GPU device found!");
+
+    return vk_phys_device;
+}
+
+static VkDevice create_vk_device(VkInstance vk_instance, VkPhysicalDevice vk_phys_device, u32 queue_family_idx)
+{
+    f32 queue_prios[] = {1.0f};
+
+    VkDeviceQueueCreateInfo queue_info = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+    queue_info.queueFamilyIndex = queue_family_idx;
+    queue_info.queueCount = 1;
+    queue_info.pQueuePriorities = queue_prios;
+
+    char const *extensions[] =
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+#if PLATFORM_OSX
+        VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+#endif
+    };
+
+    VkPhysicalDeviceFeatures features = {};
+    features.vertexPipelineStoresAndAtomics = true;
+
+    VkDeviceCreateInfo create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+    create_info.queueCreateInfoCount = 1;
+    create_info.pQueueCreateInfos = &queue_info;
+    create_info.ppEnabledExtensionNames = extensions;
+    create_info.enabledExtensionCount = ARRAYSIZE(extensions);
+    create_info.pEnabledFeatures = &features;
+
+    VkDevice vk_device = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateDevice(vk_phys_device, &create_info, nullptr, &vk_device));
+    return vk_device;
+}
+
+struct Vulkan_Debug_Utils
+{
+    VkDebugReportCallbackEXT report_callback = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
+};
+
+static Vulkan_Debug_Utils vk_create_debug_utils(VkInstance vk_instance)
+{
+    Vulkan_Debug_Utils vk_debug_utils = {};
+
+    VkDebugReportCallbackCreateInfoEXT report_create_info = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT};
+    report_create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    report_create_info.pfnCallback = debug_report_callback;
+
+    VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &report_create_info, nullptr, &vk_debug_utils.report_callback));
+
+    VkDebugUtilsMessengerCreateInfoEXT msger_create_info = {};
+    msger_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    msger_create_info.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    msger_create_info.messageType =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    msger_create_info.pfnUserCallback = debug_message_callback;
+
+    VK_CHECK(vkCreateDebugUtilsMessengerEXT(vk_instance, &msger_create_info, nullptr, &vk_debug_utils.messenger));
+
+    ASSERT(vk_debug_utils.report_callback != VK_NULL_HANDLE);
+    ASSERT(vk_debug_utils.messenger != VK_NULL_HANDLE);
+    return vk_debug_utils;
+}
+
+static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_handle)
+{
+    VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
+
+#if PLATFORM_WIN32
+    VkWin32SurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
+    create_info.hinstance = GetModuleHandle(nullptr);
+    create_info.hwnd = main_window_handle;
+    VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
+#elif PLATFORM_OSX
+    VkMacOSSurfaceCreateInfoMVK create_info = {VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK};
+    create_info.pView = main_window_handle;
+    VK_CHECK(vkCreateMacOSSurfaceMVK(vk_instance, &create_info, nullptr, &vk_surface));
+#endif
+
+    VK_ASSERT_VALID(vk_surface);
+    return vk_surface;
+}
+
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else
@@ -161,187 +341,27 @@ int main(int argc, char **argv)
     window_params.height = 1024;
     // window_params.class_name = L"editor_window_class";
     // window_params.title = L"Editor";
-
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
 
-    VkInstance vk_instance = VK_NULL_HANDLE;
-    {
-        VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
-        app_info.apiVersion = C_TARGET_VK_VERSION;
-
-        VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-        create_info.pApplicationInfo = &app_info;
-
-#if DEBUG_BUILD
-        char const *debug_layers[] = {"VK_LAYER_KHRONOS_validation"};
-        create_info.ppEnabledLayerNames = debug_layers;
-        create_info.enabledLayerCount = ARRAYSIZE(debug_layers);
-#endif
-
-        char const *extensions[] = {
-            VK_KHR_SURFACE_EXTENSION_NAME,
-            VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-            VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
-#if PLATFORM_WIN32
-            VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
-#elif PLATFORM_OSX
-            VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
-            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-#endif
-        };
-
-        create_info.ppEnabledExtensionNames = extensions;
-        create_info.enabledExtensionCount = ARRAYSIZE(extensions);
-
-        VK_CHECK(vkCreateInstance(&create_info, nullptr, &vk_instance));
-    }
-    ASSERT(vk_instance != VK_NULL_HANDLE);
-
+    VkInstance vk_instance = create_vk_instance();
     volkLoadInstanceOnly(vk_instance);
 
-#define DEBUG_BUILD 1
 #if DEBUG_BUILD
-    VkDebugReportCallbackEXT vk_dbg_callback = VK_NULL_HANDLE;
-    {
-        VkDebugReportCallbackCreateInfoEXT create_info = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT};
-        create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-        create_info.pfnCallback = debug_report_callback;
-
-        VK_CHECK(vkCreateDebugReportCallbackEXT(vk_instance, &create_info, nullptr, &vk_dbg_callback));
-    }
-    ASSERT(vk_dbg_callback != VK_NULL_HANDLE);
-
-    VkDebugUtilsMessengerEXT vk_debug_messenger = VK_NULL_HANDLE;
-    {
-        VkDebugUtilsMessengerCreateInfoEXT create_info = {};
-        create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        create_info.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        create_info.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        create_info.pfnUserCallback = debug_message_callback;
-
-        VK_CHECK(vkCreateDebugUtilsMessengerEXT(vk_instance, &create_info, nullptr, &vk_debug_messenger));
-    }
-    ASSERT(vk_debug_messenger != VK_NULL_HANDLE);
+    Vulkan_Debug_Utils vk_debug_utils = vk_create_debug_utils(vk_instance);
 #endif // DEBUG_BUILD
 
-    // Create vkDevice
+    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, &program_arena);
 
-    VkPhysicalDevice vk_phys_device = VK_NULL_HANDLE;
-    {
-        VkPhysicalDevice phys_devices[8];
-        u32 phys_device_count = ARRAYSIZE(phys_devices);
-        VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices));
+    u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
+    ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);
 
-        VkPhysicalDevice discrete_gpu = VK_NULL_HANDLE;
-        VkPhysicalDevice fallback_gpu = VK_NULL_HANDLE;
-
-        for (u32 i = 0; i < phys_device_count; ++i)
-        {
-            VkPhysicalDeviceProperties props;
-            vkGetPhysicalDeviceProperties(phys_devices[i], &props);
-
-            LOG("Enumerating GPU %s", props.deviceName);
-
-            u32 family_idx = get_gfx_family_index(phys_devices[i], &program_arena);
-            if (family_idx == VK_QUEUE_FAMILY_IGNORED)
-            {
-                continue;
-            }
-
-#if PLATFORM_WIN32
-            if (!vkGetPhysicalDeviceWin32PresentationSupportKHR(phys_devices[i], family_idx))
-            {
-                continue;
-            }
-#endif
-            // According to spec: "On macOS, all physical devices and queue families must be capable of
-            // presentation with any layer. As a result there is no macOS-specific query for these
-            // capabilities."
-
-            if (!discrete_gpu)
-            {
-                if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-                {
-                    discrete_gpu = phys_devices[i];
-                    LOG("Found discrete GPU %s", props.deviceName);
-                }
-            }
-
-            if (!fallback_gpu)
-            {
-                fallback_gpu = phys_devices[i];
-                LOG("Found fallback GPU %s", props.deviceName);
-            }
-        }
-
-        vk_phys_device = discrete_gpu ? discrete_gpu : fallback_gpu;
-    }
-    ASSERT_MSG(vk_phys_device != VK_NULL_HANDLE, "No valid GPU device found!");
-
-    u32 family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
-    ASSERT(family_idx != VK_QUEUE_FAMILY_IGNORED);
-
-    VkDevice vk_device = VK_NULL_HANDLE;
-    {
-        f32 queue_prios[] = {1.0f};
-
-        VkDeviceQueueCreateInfo queue_info = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-        queue_info.queueFamilyIndex = family_idx;
-        queue_info.queueCount = 1;
-        queue_info.pQueuePriorities = queue_prios;
-
-        char const *extensions[] =
-        {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-#if PLATFORM_OSX
-            VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
-#endif
-        };
-
-        VkPhysicalDeviceFeatures features = {};
-        features.vertexPipelineStoresAndAtomics = true;
-
-        VkDeviceCreateInfo create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-        create_info.queueCreateInfoCount = 1;
-        create_info.pQueueCreateInfos = &queue_info;
-        create_info.ppEnabledExtensionNames = extensions;
-        create_info.enabledExtensionCount = ARRAYSIZE(extensions);
-        create_info.pEnabledFeatures = &features;
-
-        VK_CHECK(vkCreateDevice(vk_phys_device, &create_info, nullptr, &vk_device));
-    }
-    VK_ASSERT_VALID(vk_device);
-
+    VkDevice vk_device = create_vk_device(vk_instance, vk_phys_device, gfx_family_idx);
     volkLoadDevice(vk_device);
 
-    VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
-
-#if PLATFORM_WIN32
-    {
-        VkWin32SurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
-        create_info.hinstance = GetModuleHandle(nullptr);
-        create_info.hwnd = main_window_handle;
-        VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
-    }
-#elif PLATFORM_OSX
-    {
-        VkMacOSSurfaceCreateInfoMVK create_info = {VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK};
-        create_info.pView = platform_window_get_raw_handle(main_window_handle);
-        VK_CHECK(vkCreateMacOSSurfaceMVK(vk_instance, &create_info, nullptr, &vk_surface));
-    }
-#endif
-
-    VK_ASSERT_VALID(vk_surface);
+    VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
 
     VkBool32 present_supported = false;
-    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(vk_phys_device, family_idx, vk_surface, &present_supported));
+    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(vk_phys_device, gfx_family_idx, vk_surface, &present_supported));
     ASSERT(present_supported);
 
     VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
@@ -377,7 +397,7 @@ int main(int argc, char **argv)
     }
 
     VkQueue vk_queue = VK_NULL_HANDLE;
-    vkGetDeviceQueue(vk_device, family_idx, 0, &vk_queue);
+    vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &vk_queue);
 
     VkRenderPass vk_render_pass = VK_NULL_HANDLE;
     {
@@ -410,10 +430,6 @@ int main(int argc, char **argv)
     }
     VK_ASSERT_VALID(vk_render_pass);
 
-    // TODO(): hardcoded window dimensions
-    u32 window_width = 500;
-    u32 window_height = 500;
-
     VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
     {
         VkSwapchainCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
@@ -421,12 +437,12 @@ int main(int argc, char **argv)
         create_info.minImageCount = 2;
         create_info.imageFormat = swapchain_fmt;
         create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-        create_info.imageExtent.width = window_width;
-        create_info.imageExtent.height = window_height;
+        create_info.imageExtent.width = window_params.width;
+        create_info.imageExtent.height = window_params.height;
         create_info.imageArrayLayers = 1;
         create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         create_info.queueFamilyIndexCount = 1;
-        create_info.pQueueFamilyIndices = &family_idx;
+        create_info.pQueueFamilyIndices = &gfx_family_idx;
         create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
         create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -555,8 +571,8 @@ int main(int argc, char **argv)
         create_info.renderPass = vk_render_pass;
         create_info.attachmentCount = 1;
         create_info.pAttachments = &swapchain_image_views[i];
-        create_info.width = window_width;
-        create_info.height = window_height;
+        create_info.width = window_params.width;
+        create_info.height = window_params.height;
         create_info.layers = 1;
 
         VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
@@ -566,7 +582,7 @@ int main(int argc, char **argv)
     {
         VkCommandPoolCreateInfo create_info = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         create_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        create_info.queueFamilyIndex = family_idx;
+        create_info.queueFamilyIndex = gfx_family_idx;
 
         VK_CHECK(vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_cmd_pool));
     }
@@ -618,15 +634,15 @@ int main(int argc, char **argv)
         VkRenderPassBeginInfo pass_begin_info = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         pass_begin_info.renderPass = vk_render_pass;
         pass_begin_info.framebuffer = swapchain_framebuffers[img_idx];
-        pass_begin_info.renderArea.extent.width = window_width;
-        pass_begin_info.renderArea.extent.height = window_height;
+        pass_begin_info.renderArea.extent.width = window_params.width;
+        pass_begin_info.renderArea.extent.height = window_params.height;
         pass_begin_info.clearValueCount = 1;
         pass_begin_info.pClearValues = &clear_color;
 
         vkCmdBeginRenderPass(vk_cmd_buffer, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkViewport viewport = {0, float(window_height), float(window_width), -float(window_height), 0, 1};
-        VkRect2D scissor = {{0, 0}, {window_width, window_height}};
+        VkViewport viewport = {0, float(window_params.height), float(window_params.width), -float(window_params.height), 0, 1};
+        VkRect2D scissor = {{0, 0}, {window_params.width, window_params.height}};
 
         vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);
         vkCmdSetScissor(vk_cmd_buffer, 0, 1, &scissor);
@@ -707,8 +723,11 @@ int main(int argc, char **argv)
 
     vkDestroyDevice(vk_device, nullptr);
 
-    vkDestroyDebugUtilsMessengerEXT(vk_instance, vk_debug_messenger, nullptr);
-    vkDestroyDebugReportCallbackEXT(vk_instance, vk_dbg_callback, nullptr);
+#if DEBUG_BUILD
+    vkDestroyDebugUtilsMessengerEXT(vk_instance, vk_debug_utils.messenger, nullptr);
+    vkDestroyDebugReportCallbackEXT(vk_instance, vk_debug_utils.report_callback, nullptr);
+#endif // DEBUG_BUILD
+
     vkDestroyInstance(vk_instance, nullptr);
 
     platform_destroy_window(main_window_handle);

@@ -1,8 +1,8 @@
 #include "core.h"
 #include "memory.h"
 #include "platform.h"
-#include "vk.h"
 #include "shader_compiler.h"
+#include "vk.h"
 
 #define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
     if (condition)                                           \
@@ -15,7 +15,7 @@
     }
 
 static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type,
-                                                 u64 object, size_t location, s32 message_code, char const *layer_prefix, char const *message, void *user_data)
+                                                 u64 object, size_t location, s32 message_code, char const* layer_prefix, char const* message, void* user_data)
 {
     bool is_error = flags & VK_DEBUG_REPORT_ERROR_BIT_EXT;
     ASSERT_IF_ERROR_ELSE_LOG(
@@ -27,9 +27,9 @@ static VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, Vk
 }
 
 static VkBool32 VKAPI_CALL debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_sev, VkDebugUtilsMessageTypeFlagsEXT msg_type,
-                                                  const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *user_data)
+                                                  const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
 {
-    char const *msg_type_name = nullptr;
+    char const* msg_type_name = nullptr;
     switch (msg_type)
     {
     case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT: // Some event has happened that is unrelated to the specification or performance
@@ -52,7 +52,7 @@ static VkBool32 VKAPI_CALL debug_message_callback(VkDebugUtilsMessageSeverityFla
     }
     }
 
-    char const *msg_sev_name = nullptr;
+    char const* msg_sev_name = nullptr;
     switch (msg_sev)
     {
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
@@ -85,7 +85,7 @@ static VkBool32 VKAPI_CALL debug_message_callback(VkDebugUtilsMessageSeverityFla
     return VK_FALSE; // Users should always return false according to spec.
 }
 
-u32 get_gfx_family_index(VkPhysicalDevice phys_device, Arena *arena)
+u32 get_gfx_family_index(VkPhysicalDevice phys_device, Arena* arena)
 {
     ARENA_DEFER_CLEAR(arena);
 
@@ -138,12 +138,12 @@ static VkInstance create_vk_instance()
     create_info.pApplicationInfo = &app_info;
 
 #if DEBUG_BUILD
-    char const *debug_layers[] = {"VK_LAYER_KHRONOS_validation"};
+    char const* debug_layers[] = {"VK_LAYER_KHRONOS_validation"};
     create_info.ppEnabledLayerNames = debug_layers;
     create_info.enabledLayerCount = ARRAYSIZE(debug_layers);
 #endif
 
-    char const *extensions[] = {
+    char const* extensions[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
@@ -163,7 +163,7 @@ static VkInstance create_vk_instance()
     return vk_instance;
 }
 
-static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, Arena* arena)
+static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Arena* arena)
 {
     u32 phys_device_count = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, nullptr));
@@ -181,19 +181,29 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, Arena*
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(phys_devices[i], &props);
 
+        VkPhysicalDeviceFeatures features;
+        vkGetPhysicalDeviceFeatures(phys_devices[i], &features);
+
         LOG("Enumerating GPU %s", props.deviceName);
 
-        u32 family_idx = get_gfx_family_index(phys_devices[i], arena);
-        if (family_idx == VK_QUEUE_FAMILY_IGNORED)
+        u32 gfx_family_idx = get_gfx_family_index(phys_devices[i], arena);
+        if (gfx_family_idx == VK_QUEUE_FAMILY_IGNORED)
         {
             continue;
         }
 
 #if PLATFORM_WIN32
-        if (!vkGetPhysicalDeviceWin32PresentationSupportKHR(phys_devices[i], family_idx))
+        if (!vkGetPhysicalDeviceWin32PresentationSupportKHR(phys_devices[i], gfx_family_idx))
         {
             continue;
         }
+#else
+        VkBool32 present_supported = false;
+        VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(phys_devices[i], gfx_family_idx, vk_surface, &present_supported));
+        if (!present_supported)
+        {
+            continue;
+        }    
 #endif
         // According to spec: "On macOS, all physical devices and queue families must be capable of
         // presentation with any layer. As a result there is no macOS-specific query for these
@@ -231,7 +241,7 @@ static VkDevice create_vk_device(VkInstance vk_instance, VkPhysicalDevice vk_phy
     queue_info.queueCount = 1;
     queue_info.pQueuePriorities = queue_prios;
 
-    char const *extensions[] =
+    char const* extensions[] =
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
@@ -312,7 +322,7 @@ static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     Arena program_arena = arena_allocate(1024 * 1024); // Give ourselves one MiB of main memory.
     DEFER { arena_free(&program_arena); };
@@ -325,7 +335,7 @@ int main(int argc, char **argv)
         bool success = platform_get_exe_path(&dir_string);
         ASSERT_MSG(success, "Failed to get path to exe, got %s", root_dir);
 
-        char *exe_path = strstr(root_dir, "editor");
+        char* exe_path = strstr(root_dir, "editor");
         exe_path += strlen("editor/");
         *exe_path = '\0';
 
@@ -350,7 +360,9 @@ int main(int argc, char **argv)
     Vulkan_Debug_Utils vk_debug_utils = vk_create_debug_utils(vk_instance);
 #endif // DEBUG_BUILD
 
-    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, &program_arena);
+    VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
+
+    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, &program_arena);
 
     u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
     ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);
@@ -358,11 +370,8 @@ int main(int argc, char **argv)
     VkDevice vk_device = create_vk_device(vk_instance, vk_phys_device, gfx_family_idx);
     volkLoadDevice(vk_device);
 
-    VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
-
-    VkBool32 present_supported = false;
-    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(vk_phys_device, gfx_family_idx, vk_surface, &present_supported));
-    ASSERT(present_supported);
+    VkQueue vk_queue = VK_NULL_HANDLE;
+    vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &vk_queue);
 
     VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
     {
@@ -395,9 +404,6 @@ int main(int argc, char **argv)
             swapchain_fmt = fmts[0].format;
         }
     }
-
-    VkQueue vk_queue = VK_NULL_HANDLE;
-    vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &vk_queue);
 
     VkRenderPass vk_render_pass = VK_NULL_HANDLE;
     {

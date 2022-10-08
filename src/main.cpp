@@ -357,6 +357,66 @@ static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_
     return vk_surface;
 }
 
+static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR vk_surface, Arena* arena)
+{
+    ARENA_DEFER_CLEAR(arena);
+
+    VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
+
+    u32 fmt_count = 0;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
+
+    ArraySlice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(arena, fmt_count);
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.m_array));
+
+    if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
+    {
+        swapchain_fmt = VK_FORMAT_R8G8B8A8_UNORM;
+    }
+    else
+    {
+        for (VkSurfaceFormatKHR const& test_fmt : fmts)
+        {
+            bool has_rgba8 = test_fmt.format == VK_FORMAT_R8G8B8A8_UNORM || test_fmt.format == VK_FORMAT_B8G8R8A8_UNORM;
+            bool has_srgb = test_fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+            if (has_rgba8 && has_srgb)
+            {
+                swapchain_fmt = test_fmt.format;
+            }
+        }
+    }
+
+    if (swapchain_fmt == VK_FORMAT_UNDEFINED)
+    {
+        swapchain_fmt = fmts[0].format;
+    }
+
+    return swapchain_fmt;
+}
+
+static VkSwapchainKHR create_vk_swapchain(VkDevice vk_device, VkSurfaceKHR vk_surface, VkFormat swapchain_fmt, u32 gfx_family_idx, u32 width, u32 height)
+{
+    VkSwapchainCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
+    create_info.surface = vk_surface;
+    create_info.minImageCount = 2;
+    create_info.imageFormat = swapchain_fmt;
+    create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    create_info.imageExtent.width = width;
+    create_info.imageExtent.height = height;
+    create_info.imageArrayLayers = 1;
+    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    create_info.queueFamilyIndexCount = 1;
+    create_info.pQueueFamilyIndices = &gfx_family_idx;
+    create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateSwapchainKHR(vk_device, &create_info, nullptr, &vk_swapchain));
+
+    return vk_swapchain;
+}
+
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else
@@ -400,12 +460,9 @@ int main(int argc, char** argv)
 
     VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
 
-    char const* desired_phys_device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    VkPhysicalDevice vk_phys_device = create_vk_physical_device(
-        vk_instance,
-        vk_surface,
-        ArraySlice<char const*>{&desired_phys_device_extensions, 1},
-        &program_arena);
+    char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    ArraySlice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
+    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, &program_arena);
 
     u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
     ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);
@@ -416,37 +473,15 @@ int main(int argc, char** argv)
     VkQueue vk_queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &vk_queue);
 
-    VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
-    {
-        ARENA_DEFER_CLEAR(&program_arena);
+    VkFormat swapchain_fmt = get_swapchain_fmt(vk_phys_device, vk_surface, &program_arena);
 
-        u32 fmt_count = 0;
-        VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
+    VkSurfaceCapabilitiesKHR surface_caps = {};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_phys_device, vk_surface, &surface_caps);
 
-        ArraySlice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(&program_arena, fmt_count);
-        VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.m_array));
+    u32 const surface_width = surface_caps.currentExtent.width;
+    u32 const surface_height = surface_caps.currentExtent.height;
 
-        if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
-        {
-            swapchain_fmt = VK_FORMAT_R8G8B8A8_UNORM;
-        }
-        else
-        {
-            for (u32 i = 0; i < fmt_count; ++i)
-            {
-                if (fmts[i].format == VK_FORMAT_R8G8B8A8_UNORM ||
-                    fmts[i].format == VK_FORMAT_B8G8R8A8_UNORM)
-                {
-                    swapchain_fmt = fmts[i].format;
-                }
-            }
-        }
-
-        if (swapchain_fmt == VK_FORMAT_UNDEFINED)
-        {
-            swapchain_fmt = fmts[0].format;
-        }
-    }
+    VkSwapchainKHR vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_width, surface_height);
 
     VkRenderPass vk_render_pass = VK_NULL_HANDLE;
     {
@@ -478,26 +513,6 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_render_pass));
     }
     VK_ASSERT_VALID(vk_render_pass);
-
-    VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
-    {
-        VkSwapchainCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
-        create_info.surface = vk_surface;
-        create_info.minImageCount = 2;
-        create_info.imageFormat = swapchain_fmt;
-        create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-        create_info.imageExtent.width = window_params.width;
-        create_info.imageExtent.height = window_params.height;
-        create_info.imageArrayLayers = 1;
-        create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        create_info.queueFamilyIndexCount = 1;
-        create_info.pQueueFamilyIndices = &gfx_family_idx;
-        create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-        create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-
-        VK_CHECK(vkCreateSwapchainKHR(vk_device, &create_info, nullptr, &vk_swapchain));
-    }
 
     VkSemaphore img_acq_semaphore = VK_NULL_HANDLE;
     VkSemaphore img_rel_semaphore = VK_NULL_HANDLE;
@@ -620,8 +635,8 @@ int main(int argc, char** argv)
         create_info.renderPass = vk_render_pass;
         create_info.attachmentCount = 1;
         create_info.pAttachments = &swapchain_image_views[i];
-        create_info.width = window_params.width;
-        create_info.height = window_params.height;
+        create_info.width = surface_width;
+        create_info.height = surface_height;
         create_info.layers = 1;
 
         VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
@@ -683,15 +698,15 @@ int main(int argc, char** argv)
         VkRenderPassBeginInfo pass_begin_info = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         pass_begin_info.renderPass = vk_render_pass;
         pass_begin_info.framebuffer = swapchain_framebuffers[img_idx];
-        pass_begin_info.renderArea.extent.width = window_params.width;
-        pass_begin_info.renderArea.extent.height = window_params.height;
+        pass_begin_info.renderArea.extent.width = surface_width;
+        pass_begin_info.renderArea.extent.height = surface_height;
         pass_begin_info.clearValueCount = 1;
         pass_begin_info.pClearValues = &clear_color;
 
         vkCmdBeginRenderPass(vk_cmd_buffer, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkViewport viewport = {0, float(window_params.height), float(window_params.width), -float(window_params.height), 0, 1};
-        VkRect2D scissor = {{0, 0}, {window_params.width, window_params.height}};
+        VkViewport viewport = {0, float(surface_height), float(surface_width), -float(surface_height), 0, 1};
+        VkRect2D scissor = {{0, 0}, {surface_width, surface_height}};
 
         vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);
         vkCmdSetScissor(vk_cmd_buffer, 0, 1, &scissor);

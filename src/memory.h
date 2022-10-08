@@ -58,6 +58,16 @@ struct ArraySlice
         ASSERT(idx < m_size);
         return m_array[idx];
     }
+
+    T* begin()
+    {
+        return m_array;
+    }
+
+    T* end()
+    {
+        return m_array + m_size;
+    }
 };
 
 template <typename T>

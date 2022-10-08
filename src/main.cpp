@@ -163,7 +163,16 @@ static VkInstance create_vk_instance()
     return vk_instance;
 }
 
-static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Arena* arena)
+static bool are_strings_same_nocase(char const* lhs, char const* rhs)
+{
+#if PLATFORM_WIN32
+    return _stricmp(lhs, rhs) == 0;
+#else
+    return strcasecmp(lhs, rhs) == 0;
+#endif
+}
+
+static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, ArraySlice<char const*> desired_extensions, Arena* arena)
 {
     u32 phys_device_count = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, nullptr));
@@ -203,11 +212,40 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
         if (!present_supported)
         {
             continue;
-        }    
+        }
 #endif
         // According to spec: "On macOS, all physical devices and queue families must be capable of
         // presentation with any layer. As a result there is no macOS-specific query for these
         // capabilities."
+
+        u32 ext_count = 0;
+        vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, nullptr);
+
+        ArraySlice<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(arena, ext_count);
+        vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, available_exts.m_array);
+
+        bool has_all_exts = true;
+        for (char const* ext_to_find : desired_extensions)
+        {
+            bool found_ext = false;
+            for (VkExtensionProperties const& ext_props : available_exts)
+            {
+                if (are_strings_same_nocase(ext_to_find, ext_props.extensionName))
+                {
+                    found_ext = true;
+                    break;
+                }
+            }
+
+            if (!found_ext)
+            {
+                has_all_exts = false;
+                break;
+            }
+        }
+
+        if (!has_all_exts)
+            continue;
 
         if (!discrete_gpu)
         {
@@ -362,7 +400,12 @@ int main(int argc, char** argv)
 
     VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
 
-    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, &program_arena);
+    char const* desired_phys_device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    VkPhysicalDevice vk_phys_device = create_vk_physical_device(
+        vk_instance,
+        vk_surface,
+        ArraySlice<char const*>{&desired_phys_device_extensions, 1},
+        &program_arena);
 
     u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
     ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);

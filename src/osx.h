@@ -51,4 +51,4 @@ bool is_file_valid(File_Handle handle);
 File_Handle open_file(String path);
 void close_file(File_Handle file);
 Option<u64> get_file_size(File_Handle file);
-Option<u64> read_file(File_Handle file, Slice dst, u64 num_bytes);
+Option<u64> read_file(File_Handle file, Slice<u8> dst, u64 num_bytes);

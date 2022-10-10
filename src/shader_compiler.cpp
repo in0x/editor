@@ -119,7 +119,7 @@ namespace glslang
         }};
 }
 
-Slice load_file(String file_path, Arena* arena)
+Slice<u8> load_file(String file_path, Arena* arena)
 {
     File_Handle file_handle = open_file(file_path);
     DEFER { log_last_platform_error(); };
@@ -128,29 +128,29 @@ Slice load_file(String file_path, Arena* arena)
     if (!is_file_valid(file_handle))
     {
         ASSERT_FAILED_MSG("Failed to open shader file %s", file_path.buffer);
-        return Slice{};
+        return {};
     }
 
     Option<u64> file_size_result = get_file_size(file_handle);
     if (!file_size_result.has_value)
     {
         ASSERT_FAILED_MSG("Failed to read size of shader file %s", file_path.buffer);
-        return Slice{};
+        return {};
     }
 
     u64 content_size = file_size_result.value + 1; // allocate an extra byte for the null-terminator.
-    Slice shader_data = arena_push(arena, content_size);
+    Slice<u8> shader_data = arena_push_array<u8>(arena, content_size);
 
     Option<u64> read_result = read_file(file_handle, shader_data, file_size_result.value);
     if (!read_result.has_value)
     {
-        return Slice{};
+        return {};
     }
 
     if (read_result.value != file_size_result.value)
     {
         ASSERT_FAILED_MSG("Expected to read %llu bytes, but got %d bytes!", file_size_result.value, read_result.value);
-        return Slice{};
+        return {};
     }
 
     shader_data[read_result.value] = '\0'; // the read data is good, set the null terminator now
@@ -193,7 +193,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 {
     ARENA_DEFER_CLEAR(arena);
 
-    Slice shader_code = load_file(src_path, arena);
+    Slice<u8> shader_code = load_file(src_path, arena);
     if (!shader_code.is_valid())
     {
         LOG("Failed to load shader from %s", src_path.buffer);
@@ -213,7 +213,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
     input.forward_compatible = false;
     input.messages = GLSLANG_MSG_DEFAULT_BIT;
     input.resource = (const glslang_resource_t*)&glslang::DefaultTBuiltInResource;
-    input.code = reinterpret_cast<char const*>(shader_code.buffer);
+    input.code = reinterpret_cast<char const*>(shader_code.array);
 
     glslang_shader_t* shader = glslang_shader_create(&input);
     DEFER { glslang_shader_delete(shader); };
@@ -254,9 +254,9 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 
     glslang_program_SPIRV_generate(program, input.stage);
     size_t byte_code_size = glslang_program_SPIRV_get_size(program);
-    ArraySlice<u32> byte_code = arena_push_array<u32>(arena, byte_code_size);
+    Slice<u32> byte_code = arena_push_array<u32>(arena, byte_code_size);
 
-    glslang_program_SPIRV_get(program, byte_code.m_array);
+    glslang_program_SPIRV_get(program, byte_code.array);
 
     {
         char const* spirv_messages = glslang_program_SPIRV_get_messages(program);
@@ -268,7 +268,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 
     VkShaderModuleCreateInfo create_info = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
     create_info.codeSize = byte_code_size * sizeof(u32);
-    create_info.pCode = byte_code.m_array;
+    create_info.pCode = byte_code.array;
 
     VkShaderModule vk_shader = VK_NULL_HANDLE;
     VK_CHECK(vkCreateShaderModule(vk_device, &create_info, nullptr, &vk_shader));

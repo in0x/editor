@@ -92,8 +92,8 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device, Arena* arena)
     u32 queue_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, nullptr);
 
-    ArraySlice<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(arena, queue_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props.m_array);
+    Slice<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(arena, queue_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props.array);
 
     for (u32 i = 0; i < queue_count; ++i)
     {
@@ -172,15 +172,15 @@ static bool are_strings_same_nocase(char const* lhs, char const* rhs)
 #endif
 }
 
-static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, ArraySlice<char const*> desired_extensions, Arena* arena)
+static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Slice<char const*> desired_extensions, Arena* arena)
 {
     u32 phys_device_count = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, nullptr));
 
     ARENA_DEFER_CLEAR(arena);
-    ArraySlice<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(arena, phys_device_count);
+    Slice<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(arena, phys_device_count);
 
-    VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices.m_array));
+    VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices.array));
 
     VkPhysicalDevice discrete_gpu = VK_NULL_HANDLE;
     VkPhysicalDevice fallback_gpu = VK_NULL_HANDLE;
@@ -221,8 +221,8 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
         u32 ext_count = 0;
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, nullptr);
 
-        ArraySlice<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(arena, ext_count);
-        vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, available_exts.m_array);
+        Slice<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(arena, ext_count);
+        vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, available_exts.array);
 
         bool has_all_exts = true;
         for (char const* ext_to_find : desired_extensions)
@@ -366,8 +366,8 @@ static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR 
     u32 fmt_count = 0;
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
 
-    ArraySlice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(arena, fmt_count);
-    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.m_array));
+    Slice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(arena, fmt_count);
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.array));
 
     if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
     {
@@ -404,7 +404,7 @@ static VkSwapchainKHR create_vk_swapchain(VkDevice vk_device, VkSurfaceKHR vk_su
     create_info.imageExtent.width = width;
     create_info.imageExtent.height = height;
     create_info.imageArrayLayers = 1;
-    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; //  VK_IMAGE_USAGE_TRANSFER_DST_BIT when we want to post-process first and use a compute copy
     create_info.queueFamilyIndexCount = 1;
     create_info.pQueueFamilyIndices = &gfx_family_idx;
     create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
@@ -443,8 +443,6 @@ int main(int argc, char** argv)
     VK_CHECK(volkInitialize());
 
     Create_Window_Params window_params = {};
-    window_params.x = 0;
-    window_params.y = 0;
     window_params.width = 1024;
     window_params.height = 1024;
     // window_params.class_name = L"editor_window_class";
@@ -461,7 +459,7 @@ int main(int argc, char** argv)
     VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
 
     char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    ArraySlice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
+    Slice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
     VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, &program_arena);
 
     u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
@@ -482,6 +480,26 @@ int main(int argc, char** argv)
     u32 const surface_height = surface_caps.currentExtent.height;
 
     VkSwapchainKHR vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_width, surface_height);
+
+    u32 swapchain_image_count = 0;
+    VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, nullptr));
+
+    Slice<VkImage> swapchain_images = arena_push_array<VkImage>(&program_arena, swapchain_image_count);
+    VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, swapchain_images.array));
+
+    Slice<VkImageView> swapchain_image_views = arena_push_array<VkImageView>(&program_arena, swapchain_image_count);
+    for (u32 i = 0; i < swapchain_image_count; ++i)
+    {
+        VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        create_info.image = swapchain_images[i];
+        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        create_info.format = swapchain_fmt;
+        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        create_info.subresourceRange.levelCount = 1;
+        create_info.subresourceRange.layerCount = 1;
+
+        VK_CHECK(vkCreateImageView(vk_device, &create_info, nullptr, &swapchain_image_views[i]));
+    }
 
     VkRenderPass vk_render_pass = VK_NULL_HANDLE;
     {
@@ -513,6 +531,20 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_render_pass));
     }
     VK_ASSERT_VALID(vk_render_pass);
+
+    VkFramebuffer swapchain_framebuffers[16];
+    for (u32 i = 0; i < swapchain_image_count; ++i)
+    {
+        VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        create_info.renderPass = vk_render_pass;
+        create_info.attachmentCount = 1;
+        create_info.pAttachments = &swapchain_image_views[i];
+        create_info.width = surface_width;
+        create_info.height = surface_height;
+        create_info.layers = 1;
+
+        VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
+    }
 
     VkSemaphore img_acq_semaphore = VK_NULL_HANDLE;
     VkSemaphore img_rel_semaphore = VK_NULL_HANDLE;
@@ -608,38 +640,6 @@ int main(int argc, char** argv)
         pipe_create_info.renderPass = vk_render_pass;
 
         VK_CHECK(vkCreateGraphicsPipelines(vk_device, pipeline_cache, 1, &pipe_create_info, nullptr, &triangle_pipeline));
-    }
-
-    VkImage swapchain_images[16];
-    u32 swapchain_image_count = ARRAYSIZE(swapchain_images);
-    VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, swapchain_images));
-
-    VkImageView swapchain_image_views[16];
-    for (uint32_t i = 0; i < swapchain_image_count; ++i)
-    {
-        VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-        create_info.image = swapchain_images[i];
-        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        create_info.format = swapchain_fmt;
-        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        create_info.subresourceRange.levelCount = 1;
-        create_info.subresourceRange.layerCount = 1;
-
-        VK_CHECK(vkCreateImageView(vk_device, &create_info, nullptr, &swapchain_image_views[i]));
-    }
-
-    VkFramebuffer swapchain_framebuffers[16];
-    for (uint32_t i = 0; i < swapchain_image_count; ++i)
-    {
-        VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-        create_info.renderPass = vk_render_pass;
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = &swapchain_image_views[i];
-        create_info.width = surface_width;
-        create_info.height = surface_height;
-        create_info.layers = 1;
-
-        VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
     }
 
     VkCommandPool vk_cmd_pool = VK_NULL_HANDLE;

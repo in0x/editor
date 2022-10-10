@@ -29,33 +29,28 @@ void arena_clear_to_mark(Arena *arena, Mark mark)
     arena->bytes_allocated = mark.position;
 }
 
-Slice arena_push(Arena *arena, u64 num_bytes)
+void* arena_push(Arena *arena, u64 num_bytes)
 {
     if ((arena->bytes_allocated + num_bytes) > arena->capacity)
     {
         ASSERT_FAILED_MSG("Tried to allocate beyond arena capacity.");
-        return Slice{};
+        return nullptr;
     }
 
-    Slice result = {};
-    result.buffer = (u8 *)arena->buffer + arena->bytes_allocated;
-    result.parent = arena;
-    result.size = num_bytes;
-
+    void* allocation = (u8 *)arena->buffer + arena->bytes_allocated;
     arena->bytes_allocated += num_bytes;
-    return result;
+    return allocation;
 }
 
-Slice arena_push_a(Arena *arena, u64 num_bytes, u64 alignment)
+void* arena_push_a(Arena *arena, u64 num_bytes, u64 alignment)
 {
     u64 mask = alignment - 1;
     ASSERT((alignment > 0) && ((alignment & mask) == 0));
 
     // Check how many bytes extra we need to so we can align the address of arena top
     u64 misalignment = (uintptr_t(arena->buffer) + arena->bytes_allocated) % alignment;
-    Slice allocation = arena_push(arena, num_bytes + misalignment);
+    void* allocation = arena_push(arena, num_bytes + misalignment);
 
     // Align the allocated pointer
-    allocation.buffer += misalignment;
-    return allocation;
+    return (char*)allocation + misalignment;
 }

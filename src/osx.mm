@@ -380,6 +380,7 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
                                NSWindowStyleMaskTitled |
                                NSWindowStyleMaskClosable |
                                NSWindowStyleMaskResizable;
+                            //    NSFullSizeContentViewWindowMask;
     
         window->object = [[NSWindow alloc]
             initWithContentRect:windowRect
@@ -388,6 +389,9 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
             defer:NO
         ];
         assert(window->object != nil);
+
+        // NSWindow* ns_window = (__bridge NSWindow*)window->object;
+        // ns_window.titlebarAppearsTransparent = YES;
 
         const NSWindowCollectionBehavior behavior = NSWindowCollectionBehaviorFullScreenPrimary |
                                                     NSWindowCollectionBehaviorManaged;
@@ -555,7 +559,7 @@ Option<u64> get_file_size(File_Handle file)
     return result;
 }
 
-Option<u64> read_file(File_Handle file, Slice dst, u64 num_bytes)
+Option<u64> read_file(File_Handle file, Slice<u8> dst, u64 num_bytes)
 {
     Option<u64> result = {};
     if (!is_file_valid(file))
@@ -563,7 +567,7 @@ Option<u64> read_file(File_Handle file, Slice dst, u64 num_bytes)
         return result;
     }
     
-    u64 bytes_read = fread(dst.buffer, 1, num_bytes, file.handle);
+    u64 bytes_read = fread(dst.array, 1, num_bytes, file.handle);
     if (bytes_read != num_bytes)
     {
         LOG("Did not read expected number of bytes from file: expected=%llu, actual=%llu", num_bytes, bytes_read);

@@ -705,7 +705,23 @@ int main(int argc, char** argv)
 
         vkCmdBeginRenderPass(vk_cmd_buffer, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkViewport viewport = {0, float(surface_height), float(surface_width), -float(surface_height), 0, 1};
+        // VkViewport viewport = {0, float(surface_height), float(surface_width), -float(surface_height), 0, 1};
+        // (0.0, 500.0)
+        //
+        //        (500.0, 0.0)
+
+        // x and y are normally the upper left corner, but as we are negating the height
+        // we are supposed to instead specify the lower left corner. Negating the height
+        // negates the y coordinate in clip space, which saves us having to negate position.y
+        // in the last step before rasterization (normally vertex shader for us).
+        VkViewport viewport = {};
+        viewport.x = 0.f; 
+        viewport.y = f32(surface_height);
+        viewport.width = f32(surface_width);
+        viewport.height = -f32(surface_height);
+        viewport.minDepth = 0.f;
+        viewport.maxDepth = 1.f;
+
         VkRect2D scissor = {{0, 0}, {surface_width, surface_height}};
 
         vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);

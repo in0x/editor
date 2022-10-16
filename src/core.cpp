@@ -77,8 +77,8 @@ static void va_inplace_printf(char const* fmt, char* buf, u64 buf_len, Print_Fla
     va_end(args);
 }
 
-constexpr u64 c_msg_buffer_size = 800;
-constexpr u64 c_log_buffer_size = 1000;
+constexpr u64 c_msg_buffer_size = 1800;
+constexpr u64 c_log_buffer_size = 2000;
 
 static thread_local char tls_msg_buffer[c_msg_buffer_size];
 static thread_local char tls_log_buffer[c_log_buffer_size];

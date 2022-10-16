@@ -267,7 +267,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
     }
 
     VkShaderModuleCreateInfo create_info = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-    create_info.codeSize = byte_code_size * sizeof(u32);
+    create_info.codeSize = byte_code_size * sizeof(u32); // size in bytes
     create_info.pCode = byte_code.array;
 
     VkShaderModule vk_shader = VK_NULL_HANDLE;

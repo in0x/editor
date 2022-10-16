@@ -4,6 +4,14 @@
 #include "shader_compiler.h"
 #include "vk.h"
 
+#define USE_GLFW 0
+
+#if USE_GLFW
+#include "../glfw/include/GLFW/glfw3.h"
+#define GLFW_EXPOSE_NATIVE_COCOA
+#include "../glfw/include/GLFW/glfw3native.h"
+#endif
+
 #define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
     if (condition)                                           \
     {                                                        \
@@ -150,6 +158,7 @@ static VkInstance create_vk_instance()
 #if PLATFORM_WIN32
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif PLATFORM_OSX
+        "VK_EXT_metal_surface",
         VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 #endif
@@ -338,7 +347,11 @@ static Vulkan_Debug_Utils vk_create_debug_utils(VkInstance vk_instance)
     return vk_debug_utils;
 }
 
+#if USE_GLFW
+static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, GLFWwindow* main_window_handle)
+#else
 static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_handle)
+#endif
 {
     VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 
@@ -347,6 +360,8 @@ static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_
     create_info.hinstance = GetModuleHandle(nullptr);
     create_info.hwnd = main_window_handle;
     VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
+#elif USE_GLFW
+    VK_CHECK(glfwCreateWindowSurface(vk_instance, main_window_handle, NULL, &vk_surface));
 #elif PLATFORM_OSX
     VkMacOSSurfaceCreateInfoMVK create_info = {VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK};
     create_info.pView = main_window_handle;
@@ -417,6 +432,46 @@ static VkSwapchainKHR create_vk_swapchain(VkDevice vk_device, VkSurfaceKHR vk_su
     return vk_swapchain;
 }
 
+static VkRenderPass create_vk_fullframe_renderpass(VkDevice vk_device, VkFormat swapchain_fmt)
+{
+    VkAttachmentDescription attachment = {};
+    attachment.format = swapchain_fmt;
+    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference color_attachment = {};
+    color_attachment.attachment = 0;
+    color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_attachment;
+
+    VkRenderPassCreateInfo create_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    create_info.attachmentCount = 1;
+    create_info.pAttachments = &attachment;
+    create_info.subpassCount = 1;
+    create_info.pSubpasses = &subpass;
+
+    VkRenderPass vk_render_pass = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_render_pass));
+    VK_ASSERT_VALID(vk_render_pass);
+    return vk_render_pass;
+}
+
+#if USE_GLFW
+static void error_callback(int error, const char* description)
+{
+    LOG("GLFW Error: %s", description);
+}
+#endif
+
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else
@@ -425,7 +480,16 @@ int main(int argc, char** argv)
     Arena program_arena = arena_allocate(1024 * 1024); // Give ourselves one MiB of main memory.
     DEFER { arena_free(&program_arena); };
 
+#if USE_GLFW
+    if (!glfwInit())
+    {
+        ASSERT_FAILED_MSG("failed to init glfw");
+    }
+
+    glfwSetErrorCallback(error_callback);
+#else
     Platform_App platform_app = platform_create_app();
+#endif
 
     char root_dir[MAX_PATH];
     {
@@ -442,21 +506,34 @@ int main(int argc, char** argv)
 
     VK_CHECK(volkInitialize());
 
+    VkInstance vk_instance = create_vk_instance();
+    volkLoadInstanceOnly(vk_instance);
+
+#if USE_GLFW
+    ASSERT(glfwVulkanSupported() == GLFW_TRUE);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    GLFWwindow* main_window_handle = glfwCreateWindow(1024, 768, "editor", 0, 0);
+	ASSERT(main_window_handle);
+#else
     Create_Window_Params window_params = {};
-    window_params.width = 1024;
-    window_params.height = 1024;
+    window_params.x = 200;
+    window_params.y = 400;
+    window_params.width = 600;
+    window_params.height = 300;
     // window_params.class_name = L"editor_window_class";
     // window_params.title = L"Editor";
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
-
-    VkInstance vk_instance = create_vk_instance();
-    volkLoadInstanceOnly(vk_instance);
+#endif // USE_GLFW
 
 #if DEBUG_BUILD
     Vulkan_Debug_Utils vk_debug_utils = vk_create_debug_utils(vk_instance);
 #endif // DEBUG_BUILD
 
+#if USE_GLFW
+    VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, main_window_handle);
+#else
     VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
+#endif
 
     char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     Slice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
@@ -476,8 +553,8 @@ int main(int argc, char** argv)
     VkSurfaceCapabilitiesKHR surface_caps = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_phys_device, vk_surface, &surface_caps);
 
-    u32 const surface_width = surface_caps.currentExtent.width;
-    u32 const surface_height = surface_caps.currentExtent.height;
+    u32 surface_width = surface_caps.currentExtent.width;
+    u32 surface_height = surface_caps.currentExtent.height;
 
     VkSwapchainKHR vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_width, surface_height);
 
@@ -501,38 +578,9 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateImageView(vk_device, &create_info, nullptr, &swapchain_image_views[i]));
     }
 
-    VkRenderPass vk_render_pass = VK_NULL_HANDLE;
-    {
-        VkAttachmentDescription attachment = {};
-        attachment.format = swapchain_fmt;
-        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkRenderPass vk_render_pass = create_vk_fullframe_renderpass(vk_device, swapchain_fmt);
 
-        VkAttachmentReference color_attachment = {};
-        color_attachment.attachment = 0;
-        color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass = {};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &color_attachment;
-
-        VkRenderPassCreateInfo create_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = &attachment;
-        create_info.subpassCount = 1;
-        create_info.pSubpasses = &subpass;
-
-        VK_CHECK(vkCreateRenderPass(vk_device, &create_info, nullptr, &vk_render_pass));
-    }
-    VK_ASSERT_VALID(vk_render_pass);
-
-    VkFramebuffer swapchain_framebuffers[16];
+    Slice<VkFramebuffer> swapchain_framebuffers = arena_push_array<VkFramebuffer>(&program_arena, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
         VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
@@ -579,19 +627,17 @@ int main(int argc, char** argv)
 
     VkPipeline triangle_pipeline = VK_NULL_HANDLE;
     {
-        VkPipelineShaderStageCreateInfo shader_stages[2] = {};
+        VkGraphicsPipelineCreateInfo pipe_create_info = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
 
+        VkPipelineShaderStageCreateInfo shader_stages[2] = {};
         shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         shader_stages[0].module = vert_shader;
         shader_stages[0].pName = "main";
-
         shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         shader_stages[1].module = frag_shader;
         shader_stages[1].pName = "main";
-
-        VkGraphicsPipelineCreateInfo pipe_create_info = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
         pipe_create_info.stageCount = ARRAYSIZE(shader_stages);
         pipe_create_info.pStages = shader_stages;
 
@@ -609,6 +655,9 @@ int main(int argc, char** argv)
 
         VkPipelineRasterizationStateCreateInfo raster_state = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
         raster_state.lineWidth = 1.f;
+        raster_state.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        raster_state.cullMode = VK_CULL_MODE_BACK_BIT;
+        raster_state.polygonMode = VK_POLYGON_MODE_FILL;
         pipe_create_info.pRasterizationState = &raster_state;
 
         VkPipelineMultisampleStateCreateInfo multisample_state = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
@@ -661,13 +710,20 @@ int main(int argc, char** argv)
         VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffer));
     }
 
+#if USE_GLFW
+    while (!glfwWindowShouldClose(main_window_handle))
+	{
+		glfwPollEvents();
+#else
     while (!platform_window_closing(main_window_handle))
     {
         platform_pump_events(platform_app, main_window_handle);
+#endif // USE_GLFW
 
         u32 img_idx = 0;
         u64 const max_timeout = ~0ull;
-        VK_CHECK(vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore, VK_NULL_HANDLE, &img_idx));
+        VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore, VK_NULL_HANDLE, &img_idx);
+        VK_CHECK(get_next_img_result);
 
         VkCommandPoolResetFlags pool_reset_flags = 0;
         VK_CHECK(vkResetCommandPool(vk_device, vk_cmd_pool, pool_reset_flags));
@@ -705,24 +761,21 @@ int main(int argc, char** argv)
 
         vkCmdBeginRenderPass(vk_cmd_buffer, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-        // VkViewport viewport = {0, float(surface_height), float(surface_width), -float(surface_height), 0, 1};
-        // (0.0, 500.0)
-        //
-        //        (500.0, 0.0)
-
         // x and y are normally the upper left corner, but as we are negating the height
         // we are supposed to instead specify the lower left corner. Negating the height
         // negates the y coordinate in clip space, which saves us having to negate position.y
         // in the last step before rasterization (normally vertex shader for us).
         VkViewport viewport = {};
-        viewport.x = 0.f; 
+        viewport.x = 0.f;
         viewport.y = f32(surface_height);
         viewport.width = f32(surface_width);
         viewport.height = -f32(surface_height);
         viewport.minDepth = 0.f;
         viewport.maxDepth = 1.f;
 
-        VkRect2D scissor = {{0, 0}, {surface_width, surface_height}};
+        VkRect2D scissor = {};
+        scissor.offset = {0, 0};
+        scissor.extent = {surface_width, surface_height};
 
         vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);
         vkCmdSetScissor(vk_cmd_buffer, 0, 1, &scissor);
@@ -770,8 +823,69 @@ int main(int argc, char** argv)
         present_info.pImageIndices = &img_idx;
 
         VK_CHECK(vkQueuePresentKHR(vk_queue, &present_info));
-
         VK_CHECK(vkDeviceWaitIdle(vk_device));
+
+#if USE_GLFW
+        if (
+#else
+        if (platform_did_window_size_change(main_window_handle) ||
+#endif
+            get_next_img_result == VK_ERROR_OUT_OF_DATE_KHR     ||
+            get_next_img_result == VK_SUBOPTIMAL_KHR)
+        {
+            for (u32 i = 0; i < swapchain_image_count; ++i)
+            {
+                vkDestroyFramebuffer(vk_device, swapchain_framebuffers[i], nullptr);
+            }
+
+            for (u32 i = 0; i < swapchain_image_count; ++i)
+            {
+                vkDestroyImageView(vk_device, swapchain_image_views[i], nullptr);
+            }
+
+            vkDestroySwapchainKHR(vk_device, vk_swapchain, nullptr);
+
+            VkSurfaceCapabilitiesKHR new_surface_caps = {};
+            vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_phys_device, vk_surface, &new_surface_caps);
+            surface_width = new_surface_caps.currentExtent.width;
+            surface_height = new_surface_caps.currentExtent.height;
+
+            LOG("Window size changed: w %u h %u. Recreating the swapchain.", surface_width, surface_height);
+
+            vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_width, surface_height);
+
+            u32 new_swapchain_image_count = 0;
+            VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &new_swapchain_image_count, nullptr));
+            ASSERT(new_swapchain_image_count == swapchain_image_count); // if these changed we'd need to be able to re-allocate the memory used below.
+
+            VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, swapchain_images.array));
+
+            for (u32 i = 0; i < swapchain_image_count; ++i)
+            {
+                VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+                create_info.image = swapchain_images[i];
+                create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                create_info.format = swapchain_fmt;
+                create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                create_info.subresourceRange.levelCount = 1;
+                create_info.subresourceRange.layerCount = 1;
+
+                VK_CHECK(vkCreateImageView(vk_device, &create_info, nullptr, &swapchain_image_views[i]));
+            }
+
+            for (u32 i = 0; i < swapchain_image_count; ++i)
+            {
+                VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+                create_info.renderPass = vk_render_pass;
+                create_info.attachmentCount = 1;
+                create_info.pAttachments = &swapchain_image_views[i];
+                create_info.width = surface_width;
+                create_info.height = surface_height;
+                create_info.layers = 1;
+
+                VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
+            }
+        }
     }
 
     shader_compiler_shutdown();
@@ -810,8 +924,12 @@ int main(int argc, char** argv)
 
     vkDestroyInstance(vk_instance, nullptr);
 
+#if USE_GLFW
+    glfwDestroyWindow(main_window_handle);
+#else
     platform_destroy_window(main_window_handle);
     platform_destroy_app(platform_app);
+#endif
 
     LOG("Engine shutdown complete.");
 

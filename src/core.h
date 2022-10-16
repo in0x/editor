@@ -72,19 +72,19 @@ void handle_assert(char const* condition, char const* msg, ...);
 
 #if PLATFORM_WIN32
 #define ASSERT_MSG(condition, msg, ...) \
-    if ((condition) == false)           \
+    if (bool(condition) == false)           \
     handle_assert(#condition, msg, __VA_ARGS__)
 
 #elif PLATFORM_OSX
 
 #define ASSERT_MSG(condition, msg, ...) \
-    if ((condition) == false)           \
+    if (bool(condition) == false)           \
     handle_assert(#condition, msg, ##__VA_ARGS__)
 
 #endif
 
 #define ASSERT(condition)     \
-    if ((condition) == false) \
+    if (bool(condition) == false) \
     handle_assert(#condition, nullptr)
 
 constexpr bool C_ALWAYS_FAILS = false;

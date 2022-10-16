@@ -21,7 +21,7 @@ bool platform_is_debugger_present()
     struct kinfo_proc   info;
     size_t              size;
 
-    // Initialize the flags so that, if sysctl fails for some bizarre 
+    // Initialize the flags so that, if sysctl fails for some bizarre
     // reason, we get a predictable result.
 
     info.kp_proc.p_flag = 0;
@@ -72,9 +72,10 @@ struct OSX_Window_Impl
     bool retina = false;
 
     bool should_terminate = false;
+    bool size_changed_unconsumed = false;
 
     // Cached window properties to filter out duplicate events
-    int width = 0; 
+    int width = 0;
     int height = 0;
     int fbWidth = 0;
     int fbHeight = 0;
@@ -88,7 +89,7 @@ struct OSX_Window_Impl
     double cursorWarpDeltaY = 0;
 };
 
-@interface WindowDelegate : NSObject 
+@interface WindowDelegate : NSObject
 {
     OSX_Window_Impl* window;
 }
@@ -124,6 +125,30 @@ struct OSX_Window_Impl
     return YES;
 }
 
+static void update_window_dimensions(OSX_Window_Impl* window)
+{
+    NSRect bounds = [window->view bounds];
+    window->width = bounds.size.width;
+    window->height = bounds.size.height;
+    window->size_changed_unconsumed = true;
+
+    // [window->object setFrame: frame display: YES animate: NO];
+
+    // NSSize frameSize = CGSizeMake(bounds.size.width, bounds.size.height);
+    // [window->view setFrameSize:frameSize];
+
+    // _sapp.framebuffer_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+    // _sapp.framebuffer_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
+}
+
+- (void)windowDidEndLiveResize:(NSNotification *)notification
+{
+    update_window_dimensions(self->window);
+    // CGRect bounds = CGDisplayBounds(window->monitor->ns.displayID);
+    // NSRect frame = NSMakeRect(0,0, window_size.width, window_size.height);
+    // [window->object setFrame:frame display:YES];
+}
+
 @end // implementation WindowDelegate
 
 @interface ContentView : NSView <NSTextInputClient>
@@ -133,15 +158,15 @@ struct OSX_Window_Impl
     NSMutableAttributedString* markedText;
 }
 
-- (instancetype)init:(OSX_Window_Impl*)new_window;
+- (instancetype)init:(OSX_Window_Impl*)new_window window_rect:(NSRect)window_rect;
 
 @end // interface ContentView
 
 @implementation ContentView
 
-- (instancetype)init:(OSX_Window_Impl *)new_window
+- (instancetype)init:(OSX_Window_Impl *)new_window window_rect:(NSRect)window_rect
 {
-    self = [super init];
+    self = [super initWithFrame:window_rect];
     if (self != nil)
     {
         self->window = new_window;
@@ -153,6 +178,20 @@ struct OSX_Window_Impl
     }
 
     return self;
+}
+
+- (BOOL)wantsUpdateLayer {
+    return YES;
+}
+
+- (BOOL)canBecomeKeyView
+{
+    return YES;
+}
+
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
 }
 
 - (void)insertText:(id)string replacementRange:(NSRange)replacementRange
@@ -236,7 +275,7 @@ struct OSX_Window_Impl
         OSX_Window_Impl* osx_window = [window_delegate editorWindow];
         osx_window->should_terminate = true;
     }
-    
+
     return NSTerminateCancel;
 }
 
@@ -305,7 +344,7 @@ Platform_App platform_create_app()
     app_wrapper.impl = new OSX_App_Impl;
     OSX_App_Impl* app = app_wrapper.impl;
 
-    @autoreleasepool 
+    @autoreleasepool
     {
         app->helper = [[AppHelper alloc] init];
         assert(app->helper != nil);
@@ -369,7 +408,7 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
     window_wrapper.impl = new OSX_Window_Impl;
     OSX_Window_Impl* window = window_wrapper.impl;
 
-    @autoreleasepool 
+    @autoreleasepool
     {
         window->delegate = [[WindowDelegate alloc] init:window];
         assert(window->delegate != nil);
@@ -381,7 +420,7 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
                                NSWindowStyleMaskClosable |
                                NSWindowStyleMaskResizable;
                             //    NSFullSizeContentViewWindowMask;
-    
+
         window->object = [[NSWindow alloc]
             initWithContentRect:windowRect
             styleMask:windowStyle
@@ -397,16 +436,23 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
                                                     NSWindowCollectionBehaviorManaged;
         [window->object setCollectionBehavior:behavior];
 
-        [window->object setFrameAutosaveName:@"EditorWindow"];
+        // [window->object setFrameAutosaveName:@"EditorWindow"];
 
-        window->view = [[ContentView alloc] init:window];
+        [window->object setLevel:NSMainMenuWindowLevel + 1];
+
+        window->view = [[ContentView alloc] init:window window_rect:windowRect];
 
         NSView* ns_view = (__bridge NSView*)window->view;
         if (![ns_view.layer isKindOfClass:[CAMetalLayer class]])
         {
-            [ns_view setLayer:[CAMetalLayer layer]];
+            CAMetalLayer* layer = [CAMetalLayer layer];
+            CGSize viewScale = [ns_view convertSizeToBacking:CGSizeMake(1.0, 1.0)];
+            layer.contentsScale = MIN(viewScale.width, viewScale.height);
+            [ns_view setLayer:layer];
             [ns_view setWantsLayer:YES];
         }
+
+        // [window->object setFrame:windowRect display:YES];
 
         window->retina = true;
 
@@ -416,6 +462,10 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
         [window->object setDelegate:window->delegate];
         [window->object setAcceptsMouseMovedEvents:YES];
         [window->object setRestorable:NO];
+
+        // NSSize window_size = get_window_size(window);
+        // window->width = window_size.width;
+        // window->height = window_size.height;
 
         // _glfwGetWindowSizeCocoa(window, &window->ns.width, &window->ns.height);
         // _glfwGetFramebufferSizeCocoa(window, &window->ns.fbWidth, &window->ns.fbHeight);
@@ -427,7 +477,7 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
         [NSApp activateIgnoringOtherApps:YES];
         [window->object makeKeyAndOrderFront:nil];
     }
-    
+
     return window_wrapper;
 }
 
@@ -445,6 +495,13 @@ void* platform_window_get_raw_handle(Platform_Window window)
     }
 }
 
+bool platform_did_window_size_change(Platform_Window window)
+{
+    bool result = window.impl->size_changed_unconsumed;
+    window.impl->size_changed_unconsumed = false;
+    return result;
+}
+
 bool platform_window_closing(Platform_Window window)
 {
     return window.impl->should_terminate;
@@ -457,7 +514,7 @@ void platform_destroy_window(Platform_Window window)
 
 void platform_pump_events(Platform_App app, Platform_Window main_window)
 {
-    @autoreleasepool 
+    @autoreleasepool
     {
         for (;;)
         {
@@ -516,7 +573,7 @@ bool is_file_valid(File_Handle handle)
     return handle.handle != nullptr;
 }
 
-File_Handle open_file(String path)  
+File_Handle open_file(String path)
 {
     if (FILE* handle = fopen(path.buffer, "r"))
     {
@@ -540,7 +597,7 @@ void close_file(File_Handle file)
 Option<u64> get_file_size(File_Handle file)
 {
     Option<u64> result = {};
-    
+
     if (file.handle)
     {
         u64 cur_file_pos = ftell(file.handle); // remember where the file head is currently
@@ -548,11 +605,11 @@ Option<u64> get_file_size(File_Handle file)
         {
             fseek(file.handle, 0, SEEK_SET); // set the file headposition back to start incase it isn't currently
         }
-        
+
         fseek(file.handle, 0, SEEK_END);    // set the position to the end of the file
         u64 file_size = ftell(file.handle); // read how many bytes the position moved from start to end
         option_set(&result, file_size);
-        
+
         fseek(file.handle, cur_file_pos, SEEK_SET);
     }
 
@@ -566,7 +623,7 @@ Option<u64> read_file(File_Handle file, Slice<u8> dst, u64 num_bytes)
     {
         return result;
     }
-    
+
     u64 bytes_read = fread(dst.array, 1, num_bytes, file.handle);
     if (bytes_read != num_bytes)
     {

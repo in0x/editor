@@ -1,16 +1,9 @@
 #include "core.h"
+#include "mathlib.h"
 #include "memory.h"
 #include "platform.h"
 #include "shader_compiler.h"
 #include "vk.h"
-
-#define USE_GLFW 0
-
-#if USE_GLFW
-#include "../glfw/include/GLFW/glfw3.h"
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include "../glfw/include/GLFW/glfw3native.h"
-#endif
 
 #define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
     if (condition)                                           \
@@ -347,11 +340,7 @@ static Vulkan_Debug_Utils vk_create_debug_utils(VkInstance vk_instance)
     return vk_debug_utils;
 }
 
-#if USE_GLFW
-static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, GLFWwindow* main_window_handle)
-#else
 static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_handle)
-#endif
 {
     VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 
@@ -360,8 +349,6 @@ static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_
     create_info.hinstance = GetModuleHandle(nullptr);
     create_info.hwnd = main_window_handle;
     VK_CHECK(vkCreateWin32SurfaceKHR(vk_instance, &create_info, nullptr, &vk_surface));
-#elif USE_GLFW
-    VK_CHECK(glfwCreateWindowSurface(vk_instance, main_window_handle, NULL, &vk_surface));
 #elif PLATFORM_OSX
     VkMacOSSurfaceCreateInfoMVK create_info = {VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK};
     create_info.pView = main_window_handle;
@@ -465,12 +452,19 @@ static VkRenderPass create_vk_fullframe_renderpass(VkDevice vk_device, VkFormat 
     return vk_render_pass;
 }
 
-#if USE_GLFW
-static void error_callback(int error, const char* description)
+void print_row(Matrix4 const& m, u32 row)
 {
-    LOG("GLFW Error: %s", description);
+    LOG("% 03.3f % 03.3f % 03.3f % 03.3f", m(row,0), m(row,1), m(row,2), m(row,3));
 }
-#endif
+
+void print_matrix(Matrix4 const& m)
+{
+    print_row(m, 0);
+    print_row(m, 1);
+    print_row(m, 2);
+    print_row(m, 3);
+    LOG("");
+}
 
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
@@ -480,16 +474,7 @@ int main(int argc, char** argv)
     Arena program_arena = arena_allocate(1024 * 1024); // Give ourselves one MiB of main memory.
     DEFER { arena_free(&program_arena); };
 
-#if USE_GLFW
-    if (!glfwInit())
-    {
-        ASSERT_FAILED_MSG("failed to init glfw");
-    }
-
-    glfwSetErrorCallback(error_callback);
-#else
     Platform_App platform_app = platform_create_app();
-#endif
 
     char root_dir[MAX_PATH];
     {
@@ -504,17 +489,13 @@ int main(int argc, char** argv)
         LOG("Root directory: \"%s\"", root_dir);
     }
 
+    test_matrix4_mul();
+
     VK_CHECK(volkInitialize());
 
     VkInstance vk_instance = create_vk_instance();
     volkLoadInstanceOnly(vk_instance);
 
-#if USE_GLFW
-    ASSERT(glfwVulkanSupported() == GLFW_TRUE);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* main_window_handle = glfwCreateWindow(1024, 768, "editor", 0, 0);
-	ASSERT(main_window_handle);
-#else
     Create_Window_Params window_params = {};
     window_params.x = 200;
     window_params.y = 400;
@@ -523,17 +504,12 @@ int main(int argc, char** argv)
     // window_params.class_name = L"editor_window_class";
     // window_params.title = L"Editor";
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
-#endif // USE_GLFW
 
 #if DEBUG_BUILD
     Vulkan_Debug_Utils vk_debug_utils = vk_create_debug_utils(vk_instance);
 #endif // DEBUG_BUILD
 
-#if USE_GLFW
-    VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, main_window_handle);
-#else
     VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
-#endif
 
     char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     Slice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
@@ -621,7 +597,16 @@ int main(int argc, char** argv)
 
     VkPipelineLayout triangle_layout = VK_NULL_HANDLE;
     {
+        VkPushConstantRange push_constants;
+        push_constants.offset = 0;
+        // push_constants.size = sizeof(glm::mat4);
+        push_constants.size = sizeof(Matrix4);
+        push_constants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
         VkPipelineLayoutCreateInfo create_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        create_info.pPushConstantRanges = &push_constants;
+        create_info.pushConstantRangeCount = 1;
+    
         VK_CHECK(vkCreatePipelineLayout(vk_device, &create_info, nullptr, &triangle_layout));
     }
 
@@ -656,7 +641,7 @@ int main(int argc, char** argv)
         VkPipelineRasterizationStateCreateInfo raster_state = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
         raster_state.lineWidth = 1.f;
         raster_state.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        raster_state.cullMode = VK_CULL_MODE_BACK_BIT;
+        raster_state.cullMode = VK_CULL_MODE_NONE;
         raster_state.polygonMode = VK_POLYGON_MODE_FILL;
         pipe_create_info.pRasterizationState = &raster_state;
 
@@ -710,15 +695,11 @@ int main(int argc, char** argv)
         VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffer));
     }
 
-#if USE_GLFW
-    while (!glfwWindowShouldClose(main_window_handle))
-	{
-		glfwPollEvents();
-#else
+    u64 frame_idx = 0;
+
     while (!platform_window_closing(main_window_handle))
     {
         platform_pump_events(platform_app, main_window_handle);
-#endif // USE_GLFW
 
         u32 img_idx = 0;
         u64 const max_timeout = ~0ull;
@@ -781,6 +762,14 @@ int main(int argc, char** argv)
         vkCmdSetScissor(vk_cmd_buffer, 0, 1, &scissor);
 
         vkCmdBindPipeline(vk_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
+
+        Matrix4 view = matrix4_translate(Vector3{0.f, 0.f, -1.f});
+        Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
+
+        Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_idx) * 0.4f, 0.f});
+        Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
+
+        vkCmdPushConstants(vk_cmd_buffer, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
         vkCmdDraw(vk_cmd_buffer, 3, 1, 0, 0);
 
         vkCmdEndRenderPass(vk_cmd_buffer);
@@ -825,11 +814,7 @@ int main(int argc, char** argv)
         VK_CHECK(vkQueuePresentKHR(vk_queue, &present_info));
         VK_CHECK(vkDeviceWaitIdle(vk_device));
 
-#if USE_GLFW
-        if (
-#else
         if (platform_did_window_size_change(main_window_handle) ||
-#endif
             get_next_img_result == VK_ERROR_OUT_OF_DATE_KHR     ||
             get_next_img_result == VK_SUBOPTIMAL_KHR)
         {
@@ -886,6 +871,8 @@ int main(int argc, char** argv)
                 VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
             }
         }
+
+        ++frame_idx;
     }
 
     shader_compiler_shutdown();
@@ -924,12 +911,8 @@ int main(int argc, char** argv)
 
     vkDestroyInstance(vk_instance, nullptr);
 
-#if USE_GLFW
-    glfwDestroyWindow(main_window_handle);
-#else
     platform_destroy_window(main_window_handle);
     platform_destroy_app(platform_app);
-#endif
 
     LOG("Engine shutdown complete.");
 

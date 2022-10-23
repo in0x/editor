@@ -16,8 +16,13 @@ const vec3 colors[] =
 
 layout(location = 0) out vec3 color;
 
+layout(push_constant) uniform constants
+{
+	mat4 render_matrix;
+} uniforms;
+
 void main()
 {
 	color = colors[gl_VertexIndex];
-	gl_Position = vec4(vertices[gl_VertexIndex], 1.0);
+	gl_Position = uniforms.render_matrix * vec4(vertices[gl_VertexIndex], 1.0);
 }

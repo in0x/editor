@@ -8,3 +8,5 @@
 #include "osx.h"
 #define platform_message
 #endif
+
+#include "platform_shared.h"

@@ -16,10 +16,20 @@ static f32 rad_to_degree(f32 radians)
 
 struct Vector3
 {
-    f32 x;        
-    f32 y;        
-    f32 z;        
+    f32 x = 0.0f;        
+    f32 y = 0.0f;        
+    f32 z = 0.0f;        
 };
+
+Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
+{
+    return Vector3 
+    {
+        lhs.x + rhs.x,
+        lhs.y + rhs.y,
+        lhs.z + rhs.z,
+    };
+}
 
 // We use column major convention.
 // https://fgiesen.wordpress.com/2012/02/12/row-major-vs-column-major-row-vectors-vs-column-vectors/

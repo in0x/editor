@@ -120,3 +120,11 @@ struct String
     char* buffer = nullptr;
     u32 len = 0;
 };
+
+void mem_zero(void* dst, u64 len);
+
+template <typename T>
+void zero_struct(T* p_struct)
+{
+    mem_zero(p_struct, sizeof(T));
+}

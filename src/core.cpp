@@ -137,3 +137,8 @@ void log_last_platform_error()
     }
 #endif
 }
+
+void mem_zero(void* dst, u64 len)
+{
+    memset(dst, 0, len);
+}

@@ -696,10 +696,12 @@ int main(int argc, char** argv)
     }
 
     u64 frame_idx = 0;
+    Vector3 camera_pos;
 
     while (!platform_window_closing(main_window_handle))
     {
-        platform_pump_events(platform_app, main_window_handle);
+        Input_Events input_events = {};
+        platform_pump_events(platform_app, main_window_handle, &input_events);
 
         u32 img_idx = 0;
         u64 const max_timeout = ~0ull;
@@ -763,7 +765,12 @@ int main(int argc, char** argv)
 
         vkCmdBindPipeline(vk_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
 
-        Matrix4 view = matrix4_translate(Vector3{0.f, 0.f, -1.f});
+        if (input_events.key_down[Input_Key_Code::A]) camera_pos.x -= -0.1f;
+        if (input_events.key_down[Input_Key_Code::D]) camera_pos.x += -0.1f;
+        if (input_events.key_down[Input_Key_Code::S]) camera_pos.y -= -0.1f;
+        if (input_events.key_down[Input_Key_Code::W]) camera_pos.y += -0.1f;
+
+        Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));
         Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
 
         Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_idx) * 0.4f, 0.f});

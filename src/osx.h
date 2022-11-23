@@ -6,9 +6,10 @@
 
 bool platform_is_debugger_present();
 
-struct String;
+struct Input_Events;
 struct OSX_Window_Impl;
 struct OSX_App_Impl;
+struct String;
 
 struct Platform_App
 {
@@ -44,7 +45,7 @@ void platform_destroy_window(Platform_Window window);
 void* platform_window_get_raw_handle(Platform_Window window);
 bool platform_did_window_size_change(Platform_Window window);
 
-void platform_pump_events(Platform_App app, Platform_Window main_window);
+void platform_pump_events(Platform_App app, Platform_Window main_window, Input_Events* input_events);
 
 bool platform_get_exe_path(String* path);
 

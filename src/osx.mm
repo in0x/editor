@@ -2,6 +2,7 @@
 
 #include "core.h"
 #include "memory.h"
+#include "platform_shared.h"
 #include "stdio.h"
 
 #import <Foundation/Foundation.h>
@@ -9,8 +10,8 @@
 #import <QuartzCore/CAMetalLayer.h>
 #import <os/log.h>
 
-#include <mach-o/dyld.h>
 #include <assert.h>
+#include <mach-o/dyld.h>
 #include <sys/sysctl.h>
 
 //From: https://developer.apple.com/library/archive/qa/qa1361/_index.html
@@ -520,8 +521,10 @@ void platform_destroy_window(Platform_Window window)
     delete window.impl;
 }
 
-void platform_pump_events(Platform_App app, Platform_Window main_window)
+void platform_pump_events(Platform_App app, Platform_Window main_window, Input_Events* input_events)
 {
+    zero_struct(input_events);
+
     @autoreleasepool
     {
         for (;;)
@@ -533,6 +536,38 @@ void platform_pump_events(Platform_App app, Platform_Window main_window)
             if (event == nil)
             {
                 break;
+            }
+
+            switch (event.type)
+            {
+                case NSEventType::NSEventTypeKeyDown:
+                {
+                    if (event.characters.UTF8String)
+                    {
+                        switch (event.characters.UTF8String[0])
+                        {
+                            case 'a':
+                            case 'A': input_events->key_down[Input_Key_Code::A] = true; break;
+                            case 'd':
+                            case 'D': input_events->key_down[Input_Key_Code::D] = true; break;
+                            case 's':
+                            case 'S': input_events->key_down[Input_Key_Code::S] = true; break;
+                            case 'w':
+                            case 'W': input_events->key_down[Input_Key_Code::W] = true; break;
+
+                            default: break;
+                        }
+                    }
+                    // bool shift_down = event.modifierFlags & NSEventModifierFlagShift;
+                    // NSEventModifierFlagCapsLock
+                    // NSEventModifierFlagControl
+                    // NSEventModifierFlagOption
+                    // NSEventModifierFlagCommand
+                    // NSEventModifierFlagFunction
+                    // event.ARepeat; //  bool flag indicating if this is a repeat from holding the key
+                    break;
+                }
+                default: break;
             }
 
             [NSApp sendEvent:event];

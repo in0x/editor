@@ -455,13 +455,21 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
         // [window->object setFrame:windowRect display:YES];
 
         window->retina = true;
-
         [window->object setContentView:window->view];
         [window->object makeFirstResponder:window->view];
-        [window->object setTitle:@"Editor"];
         [window->object setDelegate:window->delegate];
         [window->object setAcceptsMouseMovedEvents:YES];
         [window->object setRestorable:NO];
+
+        if (params.title)
+        {
+            NSString* ns_title = [NSString stringWithCString:params.title encoding:NSASCIIStringEncoding];
+            [window->object setTitle:ns_title];
+        }
+        else
+        {
+            [window->object setTitle:@"Untitled"];
+        }
 
         // NSSize window_size = get_window_size(window);
         // window->width = window_size.width;

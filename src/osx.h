@@ -25,16 +25,17 @@ struct Platform_Window
 
 struct Create_Window_Params
 {
-    u32 x;
-    u32 y;
-    u32 width;
-    u32 height;
+    u32 x = 0;
+    u32 y = 0;
+    u32 width = 0;
+    u32 height = 0;
+    char const* title = nullptr;
 };
 
 struct Window_Size
 {
-    u32 width;
-    u32 height;
+    u32 width = 0;
+    u32 height = 0;
 };
 
 Platform_Window platform_create_window(Platform_App app, Create_Window_Params params);

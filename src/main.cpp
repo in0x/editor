@@ -499,10 +499,10 @@ int main(int argc, char** argv)
     Create_Window_Params window_params = {};
     window_params.x = 200;
     window_params.y = 400;
-    window_params.width = 600;
-    window_params.height = 300;
+    window_params.width = 500;
+    window_params.height = 500;
     // window_params.class_name = L"editor_window_class";
-    // window_params.title = L"Editor";
+    window_params.title = "Title of the Window";
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
 
 #if DEBUG_BUILD

@@ -12,6 +12,7 @@ enum Input_Key_Code
     D,
     S,
     W,
+    ESC,
     // ...
     Enum_Count,
 };

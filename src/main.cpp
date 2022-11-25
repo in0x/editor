@@ -704,6 +704,11 @@ int main(int argc, char** argv)
         Input_Events input_events = {};
         platform_pump_events(platform_app, main_window_handle, &input_events);
 
+        if (input_events.key_down[Input_Key_Code::ESC])
+        {
+            break;
+        }
+
         u32 img_idx = 0;
         u64 const max_timeout = ~0ull;
         VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore, VK_NULL_HANDLE, &img_idx);

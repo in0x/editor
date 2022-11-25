@@ -545,7 +545,7 @@ void platform_pump_events(Platform_App app, Platform_Window main_window, Input_E
                 case NSEventType::NSEventTypeKeyDown:
                 {
                     forward_event = false;
-                    
+
                     if (event.characters.UTF8String)
                     {
                         switch (event.characters.UTF8String[0])
@@ -558,8 +558,12 @@ void platform_pump_events(Platform_App app, Platform_Window main_window, Input_E
                             case 'S': input_events->key_down[Input_Key_Code::S] = true; break;
                             case 'w':
                             case 'W': input_events->key_down[Input_Key_Code::W] = true; break;
-
-                            default: break;
+                            case 27 : input_events->key_down[Input_Key_Code::ESC] = true; break; 
+                            default: 
+                            {
+                                LOG("Unhandled Key pressed: %s", event.characters.UTF8String);
+                                break;
+                            }
                         }
                     }
                     // bool shift_down = event.modifierFlags & NSEventModifierFlagShift;

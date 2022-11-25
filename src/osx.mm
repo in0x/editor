@@ -538,10 +538,14 @@ void platform_pump_events(Platform_App app, Platform_Window main_window, Input_E
                 break;
             }
 
+            bool forward_event = true;
+
             switch (event.type)
             {
                 case NSEventType::NSEventTypeKeyDown:
                 {
+                    forward_event = false;
+                    
                     if (event.characters.UTF8String)
                     {
                         switch (event.characters.UTF8String[0])
@@ -570,7 +574,10 @@ void platform_pump_events(Platform_App app, Platform_Window main_window, Input_E
                 default: break;
             }
 
-            [NSApp sendEvent:event];
+            if (forward_event)
+            {
+                [NSApp sendEvent:event];
+            }
         }
     } // autoreleasepool
 }

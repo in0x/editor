@@ -19,7 +19,23 @@ struct Vector3
     f32 x = 0.0f;        
     f32 y = 0.0f;        
     f32 z = 0.0f;        
+
+    Vector3& operator+=(Vector3 const& other);
+    Vector3& operator*=(Vector3 const& other);
+
+    Vector3& operator+=(f32 val);
+    Vector3& operator*=(f32 val);
 };
+
+Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
+{
+    return Vector3
+    {
+        lhs.x * rhs.x,
+        lhs.y * rhs.y,
+        lhs.z * rhs.z,
+    };
+}
 
 Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
 {
@@ -29,6 +45,50 @@ Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
         lhs.y + rhs.y,
         lhs.z + rhs.z,
     };
+}
+
+Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
+{
+    return Vector3
+    {
+        lhs.x * rhs,
+        lhs.y * rhs,
+        lhs.z * rhs,
+    };
+}
+
+Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
+{
+    return Vector3 
+    {
+        lhs.x + rhs,
+        lhs.y + rhs,
+        lhs.z + rhs,
+    };
+}
+
+Vector3& Vector3::operator+=(Vector3 const& other)
+{
+    *this = vec3_add(*this, other);
+    return *this;
+}
+
+Vector3& Vector3::operator*=(Vector3 const& other)
+{
+    *this = vec3_mul(*this, other);
+    return *this;
+}
+
+Vector3& Vector3::operator+=(f32 val)
+{
+    *this = vec3_add(*this, val);
+    return *this;
+}
+
+Vector3& Vector3::operator*=(f32 val)
+{
+    *this = vec3_mul(*this, val);
+    return *this;
 }
 
 // We use column major convention.

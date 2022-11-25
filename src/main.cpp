@@ -502,7 +502,7 @@ int main(int argc, char** argv)
     window_params.width = 500;
     window_params.height = 500;
     // window_params.class_name = L"editor_window_class";
-    window_params.title = "Title of the Window";
+    window_params.title = "Editor";
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
 
 #if DEBUG_BUILD
@@ -697,6 +697,7 @@ int main(int argc, char** argv)
 
     u64 frame_idx = 0;
     Vector3 camera_pos;
+    Vector3 camera_vel;
 
     while (!platform_window_closing(main_window_handle))
     {
@@ -765,10 +766,14 @@ int main(int argc, char** argv)
 
         vkCmdBindPipeline(vk_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
 
-        if (input_events.key_down[Input_Key_Code::A]) camera_pos.x -= -0.1f;
-        if (input_events.key_down[Input_Key_Code::D]) camera_pos.x += -0.1f;
-        if (input_events.key_down[Input_Key_Code::S]) camera_pos.y -= -0.1f;
-        if (input_events.key_down[Input_Key_Code::W]) camera_pos.y += -0.1f;
+        camera_vel *= 0.95f; 
+
+        if (input_events.key_down[Input_Key_Code::A]) camera_vel.x -= -0.025f;
+        if (input_events.key_down[Input_Key_Code::D]) camera_vel.x += -0.025f;
+        if (input_events.key_down[Input_Key_Code::S]) camera_vel.y -= -0.025f;
+        if (input_events.key_down[Input_Key_Code::W]) camera_vel.y += -0.025f;
+
+        camera_pos += camera_vel;
 
         Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));
         Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);

@@ -14,6 +14,12 @@ static f32 rad_to_degree(f32 radians)
     return radians * (180.0f / Pi);
 }
 
+static f32 clamp(f32 v, f32 min, f32 max) {
+    if (v < min) return min;
+    else if (v > max) return max;
+    else return v; 
+}
+
 struct Vector3
 {
     f32 x = 0.0f;        
@@ -26,6 +32,14 @@ struct Vector3
     Vector3& operator+=(f32 val);
     Vector3& operator*=(f32 val);
 };
+
+static Vector3 clamp(Vector3 v, f32 min, f32 max) {
+    return Vector3 {
+        clamp(v.x, min, max),
+        clamp(v.y, min, max),
+        clamp(v.z, min, max)
+    };
+}
 
 Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
 {

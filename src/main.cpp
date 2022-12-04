@@ -474,6 +474,8 @@ void print_matrix(Matrix4 const& m)
 // free cam
 //  mouse input
 // window doesnt background
+// VK_KHR_dynamic_rendering
+// gpu text rendering
 // depth map
 // model loading
 // deffered render
@@ -792,12 +794,11 @@ int main(int argc, char** argv)
         viewport.height = -f32(surface_height);
         viewport.minDepth = 0.f;
         viewport.maxDepth = 1.f;
+        vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);
 
         VkRect2D scissor = {};
         scissor.offset = {0, 0};
         scissor.extent = {surface_width, surface_height};
-
-        vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);
         vkCmdSetScissor(vk_cmd_buffer, 0, 1, &scissor);
 
         vkCmdBindPipeline(vk_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
@@ -809,6 +810,7 @@ int main(int argc, char** argv)
         if (input_events.key_down[Input_Key_Code::S]) camera_vel.y -= -0.025f;
         if (input_events.key_down[Input_Key_Code::W]) camera_vel.y += -0.025f;
 
+        camera_vel = clamp(camera_vel, -0.05f, 0.05f);
         camera_pos += camera_vel;
 
         Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));
@@ -861,6 +863,9 @@ int main(int argc, char** argv)
 
         VK_CHECK(vkQueuePresentKHR(vk_queue, &present_info));
         VK_CHECK(vkDeviceWaitIdle(vk_device));
+        // TODO(): this waitdeviceidle is a workaround because a) we do not have a fence
+        // to wait for rendering to finish b) we dont double/tripple buffer the necessary
+        // structures to have multiple frames in-flight at a time.
 
         if (platform_did_window_size_change(main_window_handle) ||
             get_next_img_result == VK_ERROR_OUT_OF_DATE_KHR     ||

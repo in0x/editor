@@ -4,7 +4,7 @@
 struct VkDevice_T;
 struct VkShaderModule_T;
 
-struct Arena;
+struct Context;
 
 struct Shader_Stage
 {
@@ -16,7 +16,7 @@ struct Shader_Stage
 	};
 };
 
-VkShaderModule_T* compile_shader(VkDevice_T* vk_device, Shader_Stage::Enum stage, String src_path, Arena* arena);
+VkShaderModule_T* compile_shader(VkDevice_T* vk_device, Shader_Stage::Enum stage, String src_path, Context* ctx);
 
 void shader_compiler_init();
 void shader_compiler_shutdown();

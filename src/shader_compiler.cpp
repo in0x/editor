@@ -1,6 +1,7 @@
 #include "shader_compiler.h"
 #include "ResourceLimits.h"
 #include "core.h"
+#include "context.h"
 #include "glslang_c_interface.h"
 #include "memory.h"
 #include "platform.h"
@@ -189,11 +190,11 @@ glslang_target_client_version_t map_version(u32 val)
     }
 }
 
-VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, String src_path, Arena* arena)
+VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, String src_path, Context* ctx)
 {
-    ARENA_DEFER_CLEAR(arena);
+    ARENA_DEFER_CLEAR(ctx->tmp_bump);
 
-    Slice<u8> shader_code = load_file(src_path, arena);
+    Slice<u8> shader_code = load_file(src_path, ctx->tmp_bump);
     if (!shader_code.is_valid())
     {
         LOG("Failed to load shader from %s", src_path.buffer);
@@ -254,7 +255,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 
     glslang_program_SPIRV_generate(program, input.stage);
     size_t byte_code_size = glslang_program_SPIRV_get_size(program);
-    Slice<u32> byte_code = arena_push_array<u32>(arena, byte_code_size);
+    Slice<u32> byte_code = arena_push_array<u32>(ctx->bump, byte_code_size);
 
     glslang_program_SPIRV_get(program, byte_code.array);
 

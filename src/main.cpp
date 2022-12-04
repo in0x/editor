@@ -1,4 +1,5 @@
 #include "core.h"
+#include "context.h"
 #include "mathlib.h"
 #include "memory.h"
 #include "platform.h"
@@ -86,14 +87,14 @@ static VkBool32 VKAPI_CALL debug_message_callback(VkDebugUtilsMessageSeverityFla
     return VK_FALSE; // Users should always return false according to spec.
 }
 
-u32 get_gfx_family_index(VkPhysicalDevice phys_device, Arena* arena)
+u32 get_gfx_family_index(VkPhysicalDevice phys_device, Context ctx)
 {
-    ARENA_DEFER_CLEAR(arena);
+    ARENA_DEFER_CLEAR(ctx.tmp_bump);
 
     u32 queue_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, nullptr);
 
-    Slice<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(arena, queue_count);
+    Slice<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(ctx.tmp_bump, queue_count);
     vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props.array);
 
     for (u32 i = 0; i < queue_count; ++i)
@@ -174,13 +175,14 @@ static bool are_strings_same_nocase(char const* lhs, char const* rhs)
 #endif
 }
 
-static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Slice<char const*> desired_extensions, Arena* arena)
+static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Slice<char const*> desired_extensions, Context ctx)
 {
+    ARENA_DEFER_CLEAR(ctx.tmp_bump);
+
     u32 phys_device_count = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, nullptr));
 
-    ARENA_DEFER_CLEAR(arena);
-    Slice<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(arena, phys_device_count);
+    Slice<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(ctx.tmp_bump, phys_device_count);
 
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices.array));
 
@@ -197,7 +199,7 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
 
         LOG("Enumerating GPU %s", props.deviceName);
 
-        u32 gfx_family_idx = get_gfx_family_index(phys_devices[i], arena);
+        u32 gfx_family_idx = get_gfx_family_index(phys_devices[i], ctx);
         if (gfx_family_idx == VK_QUEUE_FAMILY_IGNORED)
         {
             continue;
@@ -223,7 +225,7 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
         u32 ext_count = 0;
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, nullptr);
 
-        Slice<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(arena, ext_count);
+        Slice<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(ctx.tmp_bump, ext_count);
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, available_exts.array);
 
         bool has_all_exts = true;
@@ -359,16 +361,16 @@ static VkSurfaceKHR create_vk_surface(VkInstance vk_instance, void* main_window_
     return vk_surface;
 }
 
-static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR vk_surface, Arena* arena)
+static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR vk_surface, Context ctx)
 {
-    ARENA_DEFER_CLEAR(arena);
+    ARENA_DEFER_CLEAR(ctx.tmp_bump);
 
     VkFormat swapchain_fmt = VK_FORMAT_UNDEFINED;
 
     u32 fmt_count = 0;
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
 
-    Slice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(arena, fmt_count);
+    Slice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(ctx.tmp_bump, fmt_count);
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.array));
 
     if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
@@ -466,13 +468,42 @@ void print_matrix(Matrix4 const& m)
     LOG("");
 }
 
+// todo:
+// finish going through vulkan tutorial
+// render cube geometry
+// free cam
+//  mouse input
+// window doesnt background
+// depth map
+// model loading
+// deffered render
+// basic lighting
+//  pbr
+//  point / spot / directional
+// font rendering
+// imgui or custom ui
+// physics
+// animation
+// sound
+
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else
 int main(int argc, char** argv)
 {
-    Arena program_arena = arena_allocate(1024 * 1024); // Give ourselves one MiB of main memory.
-    DEFER { arena_free(&program_arena); };
+    // We want two allocators, global and temporary lifetime.
+    // This lets solve cases where permanent allocatiosn happen deeper in the stack then temp ones. If we use
+    // one allocator, the permanent alloc blocks the temp ones from being freed. Example: loading a mesh, helper
+    // allocations vs permanent mesh data alloc. With two, the helpers go on the temp (freed per scope or once
+    // per frame -> then we can have two for rendering last frame async), the mesh data goes on the permanent stack.
+    Arena program_lifetime_allocator = arena_allocate(1024 * 1024 * 10); // Give ourselves 10 MiB of memory to place global lifetime allocs.
+    Arena temporary_lifetime_allocator = arena_allocate(1024 * 1024);  // And 1 MiB for temporary allocations (lifetime < 1 frame). 
+    DEFER  { 
+        arena_free(&program_lifetime_allocator); 
+        arena_free(&temporary_lifetime_allocator); };
+    Context ctx;
+    ctx.bump = &program_lifetime_allocator;
+    ctx.tmp_bump = &temporary_lifetime_allocator;
 
     Platform_App platform_app = platform_create_app();
 
@@ -513,9 +544,9 @@ int main(int argc, char** argv)
 
     char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     Slice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
-    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, &program_arena);
+    VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, ctx);
 
-    u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, &program_arena);
+    u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, ctx);
     ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);
 
     VkDevice vk_device = create_vk_device(vk_instance, vk_phys_device, gfx_family_idx);
@@ -524,7 +555,7 @@ int main(int argc, char** argv)
     VkQueue vk_queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &vk_queue);
 
-    VkFormat swapchain_fmt = get_swapchain_fmt(vk_phys_device, vk_surface, &program_arena);
+    VkFormat swapchain_fmt = get_swapchain_fmt(vk_phys_device, vk_surface, ctx);
 
     VkSurfaceCapabilitiesKHR surface_caps = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_phys_device, vk_surface, &surface_caps);
@@ -537,10 +568,10 @@ int main(int argc, char** argv)
     u32 swapchain_image_count = 0;
     VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, nullptr));
 
-    Slice<VkImage> swapchain_images = arena_push_array<VkImage>(&program_arena, swapchain_image_count);
+    Slice<VkImage> swapchain_images = arena_push_array<VkImage>(ctx.bump, swapchain_image_count);
     VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, swapchain_images.array));
 
-    Slice<VkImageView> swapchain_image_views = arena_push_array<VkImageView>(&program_arena, swapchain_image_count);
+    Slice<VkImageView> swapchain_image_views = arena_push_array<VkImageView>(ctx.bump, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
         VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -556,7 +587,7 @@ int main(int argc, char** argv)
 
     VkRenderPass vk_render_pass = create_vk_fullframe_renderpass(vk_device, swapchain_fmt);
 
-    Slice<VkFramebuffer> swapchain_framebuffers = arena_push_array<VkFramebuffer>(&program_arena, swapchain_image_count);
+    Slice<VkFramebuffer> swapchain_framebuffers = arena_push_array<VkFramebuffer>(ctx.bump, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
         VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
@@ -585,12 +616,12 @@ int main(int argc, char** argv)
     char shader_path[MAX_PATH] = "\0";
     strcpy(shader_path, root_dir);
     strcat(shader_path, "src/shaders/triangle.vert.glsl");
-    VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, String{shader_path, MAX_PATH}, &program_arena);
+    VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, String{shader_path, MAX_PATH}, &ctx);
 
     shader_path[0] = '\0';
     strcpy(shader_path, root_dir);
     strcat(shader_path, "src/shaders/triangle.frag.glsl");
-    VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, String{shader_path, MAX_PATH}, &program_arena);
+    VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, String{shader_path, MAX_PATH}, &ctx);
 
     // TODO(): Configure later
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;

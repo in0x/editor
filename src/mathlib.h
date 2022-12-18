@@ -14,7 +14,8 @@ static f32 rad_to_degree(f32 radians)
     return radians * (180.0f / Pi);
 }
 
-static f32 clamp(f32 v, f32 min, f32 max) {
+template <typename T>
+static T clamp(T v, T min, T max) {
     if (v < min) return min;
     else if (v > max) return max;
     else return v; 

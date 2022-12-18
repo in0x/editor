@@ -7,6 +7,6 @@ void main()
 {
 	// outputColor = vec4(1.0, 0.64, 0.0, 1.0);
 	float gamma = 2.2;
-    vec3 correctedColor = pow(color, vec3(1.0/gamma));
+    vec3 correctedColor = pow(color, vec3(1.0/gamma)); // convert from linear to srgb
 	outputColor = vec4(correctedColor, 1.0);
 }

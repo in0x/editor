@@ -901,6 +901,8 @@ int main(int argc, char** argv)
             get_next_img_result == VK_ERROR_OUT_OF_DATE_KHR     ||
             get_next_img_result == VK_SUBOPTIMAL_KHR)
         {
+            vkDeviceWaitIdle(vk_device);
+
             for (u32 i = 0; i < swapchain_image_count; ++i)
             {
                 vkDestroyFramebuffer(vk_device, swapchain_framebuffers[i], nullptr);

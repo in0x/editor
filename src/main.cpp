@@ -4,7 +4,10 @@
 #include "memory.h"
 #include "platform.h"
 #include "shader_compiler.h"
+#include "timer.h"
 #include "vk.h"
+
+constexpr s64 MAX_FRAMES_IN_FLIGHT = 2;
 
 #define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
     if (condition)                                           \
@@ -94,7 +97,7 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device, Context ctx)
     u32 queue_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, nullptr);
 
-    Slice<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(ctx.tmp_bump, queue_count);
+    Array<VkQueueFamilyProperties> queue_props = arena_push_array<VkQueueFamilyProperties>(ctx.tmp_bump, queue_count);
     vkGetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_count, queue_props.array);
 
     for (u32 i = 0; i < queue_count; ++i)
@@ -175,14 +178,14 @@ static bool are_strings_same_nocase(char const* lhs, char const* rhs)
 #endif
 }
 
-static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Slice<char const*> desired_extensions, Context ctx)
+static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurfaceKHR vk_surface, Array<char const*> desired_extensions, Context ctx)
 {
     ARENA_DEFER_CLEAR(ctx.tmp_bump);
 
     u32 phys_device_count = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, nullptr));
 
-    Slice<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(ctx.tmp_bump, phys_device_count);
+    Array<VkPhysicalDevice> phys_devices = arena_push_array<VkPhysicalDevice>(ctx.tmp_bump, phys_device_count);
 
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &phys_device_count, phys_devices.array));
 
@@ -225,7 +228,7 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
         u32 ext_count = 0;
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, nullptr);
 
-        Slice<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(ctx.tmp_bump, ext_count);
+        Array<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(ctx.tmp_bump, ext_count, ext_count);
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, available_exts.array);
 
         bool has_all_exts = true;
@@ -370,7 +373,7 @@ static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR 
     u32 fmt_count = 0;
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
 
-    Slice<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(ctx.tmp_bump, fmt_count);
+    Array<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(ctx.tmp_bump, fmt_count, fmt_count);
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.array));
 
     if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
@@ -398,11 +401,11 @@ static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR 
     return swapchain_fmt;
 }
 
-static VkSwapchainKHR create_vk_swapchain(VkDevice vk_device, VkSurfaceKHR vk_surface, VkFormat swapchain_fmt, u32 gfx_family_idx, u32 width, u32 height)
+static VkSwapchainKHR create_vk_swapchain(VkDevice vk_device, VkSurfaceKHR vk_surface, VkFormat swapchain_fmt, u32 gfx_family_idx, u32 numImages, u32 width, u32 height)
 {
     VkSwapchainCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
     create_info.surface = vk_surface;
-    create_info.minImageCount = 2;
+    create_info.minImageCount = numImages;
     create_info.imageFormat = swapchain_fmt;
     create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     create_info.imageExtent.width = width;
@@ -470,6 +473,7 @@ void print_matrix(Matrix4 const& m)
 
 // todo:
 // finish going through vulkan tutorial
+// natvis for Array<T>
 // render cube geometry
 // free cam
 //  mouse input
@@ -545,7 +549,7 @@ int main(int argc, char** argv)
     VkSurfaceKHR vk_surface = create_vk_surface(vk_instance, platform_window_get_raw_handle(main_window_handle));
 
     char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    Slice<char const*> phys_device_ext_slice{&phys_device_exts, 1};
+    Array<char const*> phys_device_ext_slice{&phys_device_exts, 1};
     VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, ctx);
 
     u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, ctx);
@@ -562,18 +566,19 @@ int main(int argc, char** argv)
     VkSurfaceCapabilitiesKHR surface_caps = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_phys_device, vk_surface, &surface_caps);
 
-    u32 surface_width = surface_caps.currentExtent.width;
+    u32 surface_width  = surface_caps.currentExtent.width;
     u32 surface_height = surface_caps.currentExtent.height;
-
-    VkSwapchainKHR vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_width, surface_height);
+    u32 surface_count  = MAX_FRAMES_IN_FLIGHT + surface_caps.minImageCount;
+    surface_count = clamp(surface_count, surface_caps.maxImageCount, surface_caps.maxImageCount);
+    VkSwapchainKHR vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_count, surface_width, surface_height);
 
     u32 swapchain_image_count = 0;
     VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, nullptr));
 
-    Slice<VkImage> swapchain_images = arena_push_array<VkImage>(ctx.bump, swapchain_image_count);
+    Array<VkImage> swapchain_images = arena_push_array<VkImage>(ctx.bump, swapchain_image_count);
     VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchain_image_count, swapchain_images.array));
 
-    Slice<VkImageView> swapchain_image_views = arena_push_array<VkImageView>(ctx.bump, swapchain_image_count);
+    Array<VkImageView> swapchain_image_views = arena_push_array<VkImageView>(ctx.bump, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
         VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -589,7 +594,7 @@ int main(int argc, char** argv)
 
     VkRenderPass vk_render_pass = create_vk_fullframe_renderpass(vk_device, swapchain_fmt);
 
-    Slice<VkFramebuffer> swapchain_framebuffers = arena_push_array<VkFramebuffer>(ctx.bump, swapchain_image_count);
+    Array<VkFramebuffer> swapchain_framebuffers = arena_push_array<VkFramebuffer>(ctx.bump, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
         VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
@@ -603,14 +608,31 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateFramebuffer(vk_device, &create_info, nullptr, &swapchain_framebuffers[i]));
     }
 
-    VkSemaphore img_acq_semaphore = VK_NULL_HANDLE;
-    VkSemaphore img_rel_semaphore = VK_NULL_HANDLE;
+    VkSemaphore img_acq_semaphore[MAX_FRAMES_IN_FLIGHT] = {};
+    VkSemaphore img_rel_semaphore[MAX_FRAMES_IN_FLIGHT] = {};
     {
         VkSemaphoreCreateInfo create_info = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-        VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &img_acq_semaphore));
-        VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &img_rel_semaphore));
-        VK_ASSERT_VALID(img_acq_semaphore);
-        VK_ASSERT_VALID(img_rel_semaphore);
+        for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &img_acq_semaphore[i]));
+            VK_ASSERT_VALID(img_acq_semaphore[i]);
+        }
+        for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            VK_CHECK(vkCreateSemaphore(vk_device, &create_info, nullptr, &img_rel_semaphore[i]));
+            VK_ASSERT_VALID(img_rel_semaphore[i]);
+        }
+    }
+
+    VkFence end_of_frame_fences[MAX_FRAMES_IN_FLIGHT] = {};
+    {
+        VkFenceCreateInfo create_info = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            VK_CHECK(vkCreateFence(vk_device, &create_info, nullptr, &end_of_frame_fences[i]));
+            VK_ASSERT_VALID(end_of_frame_fences[i]);
+        }
     }
 
     shader_compiler_init();
@@ -712,23 +734,24 @@ int main(int argc, char** argv)
     VkCommandPool vk_cmd_pool = VK_NULL_HANDLE;
     {
         VkCommandPoolCreateInfo create_info = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-        create_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         create_info.queueFamilyIndex = gfx_family_idx;
 
         VK_CHECK(vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_cmd_pool));
     }
 
-    VkCommandBuffer vk_cmd_buffer = VK_NULL_HANDLE;
+    VkCommandBuffer vk_cmd_buffers[MAX_FRAMES_IN_FLIGHT] = {};
     {
         VkCommandBufferAllocateInfo allocate_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         allocate_info.commandPool = vk_cmd_pool;
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocate_info.commandBufferCount = 1;
+        allocate_info.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 
-        VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffer));
+        VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffers[0]));
     }
 
-    u64 frame_idx = 0;
+    Timer frame_timer = make_timer();
+    s64 frame_count = 0;
     Vector3 camera_pos;
     Vector3 camera_vel;
 
@@ -742,18 +765,25 @@ int main(int argc, char** argv)
             break;
         }
 
-        u32 img_idx = 0;
         u64 const max_timeout = ~0ull;
-        VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore, VK_NULL_HANDLE, &img_idx);
+        s64 frame_idx = frame_count % MAX_FRAMES_IN_FLIGHT;
+
+        vkWaitForFences(vk_device, 1, &end_of_frame_fences[frame_idx], VK_TRUE, max_timeout);
+        vkResetFences(vk_device, 1, &end_of_frame_fences[frame_idx]);
+
+        u32 img_idx = 0;
+        VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore[frame_idx], VK_NULL_HANDLE, &img_idx);
         VK_CHECK(get_next_img_result);
 
-        VkCommandPoolResetFlags pool_reset_flags = 0;
-        VK_CHECK(vkResetCommandPool(vk_device, vk_cmd_pool, pool_reset_flags));
+        // VkCommandPoolResetFlags pool_reset_flags = 0;
+        // VK_CHECK(vkResetCommandPool(vk_device, vk_cmd_pool, pool_reset_flags));
 
         VkCommandBufferBeginInfo begin_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        VK_CHECK(vkBeginCommandBuffer(vk_cmd_buffer, &begin_info));
+        VkCommandBuffer frame_cmds = vk_cmd_buffers[frame_idx];
+
+        VK_CHECK(vkBeginCommandBuffer(frame_cmds, &begin_info));
 
         VkImageMemoryBarrier render_begin_barrier = create_image_barrier(
             swapchain_images[img_idx],
@@ -763,7 +793,7 @@ int main(int argc, char** argv)
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
         vkCmdPipelineBarrier(
-            vk_cmd_buffer,
+            frame_cmds,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_DEPENDENCY_BY_REGION_BIT,
@@ -781,7 +811,7 @@ int main(int argc, char** argv)
         pass_begin_info.clearValueCount = 1;
         pass_begin_info.pClearValues = &clear_color;
 
-        vkCmdBeginRenderPass(vk_cmd_buffer, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(frame_cmds, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
         // x and y are normally the upper left corner, but as we are negating the height
         // we are supposed to instead specify the lower left corner. Negating the height
@@ -794,14 +824,14 @@ int main(int argc, char** argv)
         viewport.height = -f32(surface_height);
         viewport.minDepth = 0.f;
         viewport.maxDepth = 1.f;
-        vkCmdSetViewport(vk_cmd_buffer, 0, 1, &viewport);
+        vkCmdSetViewport(frame_cmds, 0, 1, &viewport);
 
         VkRect2D scissor = {};
         scissor.offset = {0, 0};
         scissor.extent = {surface_width, surface_height};
-        vkCmdSetScissor(vk_cmd_buffer, 0, 1, &scissor);
+        vkCmdSetScissor(frame_cmds, 0, 1, &scissor);
 
-        vkCmdBindPipeline(vk_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
+        vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
 
         camera_vel *= 0.95f; 
 
@@ -816,13 +846,13 @@ int main(int argc, char** argv)
         Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));
         Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
 
-        Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_idx) * 0.4f, 0.f});
+        Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_count) * 0.4f, 0.f});
         Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
 
-        vkCmdPushConstants(vk_cmd_buffer, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
-        vkCmdDraw(vk_cmd_buffer, 3, 1, 0, 0);
+        vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
+        vkCmdDraw(frame_cmds, 3, 1, 0, 0);
 
-        vkCmdEndRenderPass(vk_cmd_buffer);
+        vkCmdEndRenderPass(frame_cmds);
 
         VkImageMemoryBarrier render_end_barrier = create_image_barrier(
             swapchain_images[img_idx],
@@ -832,37 +862,37 @@ int main(int argc, char** argv)
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
         vkCmdPipelineBarrier(
-            vk_cmd_buffer,
+            frame_cmds,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             VK_DEPENDENCY_BY_REGION_BIT,
             0, 0, 0, 0, 1,
             &render_end_barrier);
 
-        VK_CHECK(vkEndCommandBuffer(vk_cmd_buffer));
+        VK_CHECK(vkEndCommandBuffer(frame_cmds));
 
         VkPipelineStageFlags submit_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         VkSubmitInfo submit_info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
         submit_info.waitSemaphoreCount = 1;
-        submit_info.pWaitSemaphores = &img_acq_semaphore;
+        submit_info.pWaitSemaphores = &img_acq_semaphore[frame_idx];
         submit_info.pWaitDstStageMask = &submit_stage_mask;
         submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &vk_cmd_buffer;
+        submit_info.pCommandBuffers = &frame_cmds;
         submit_info.signalSemaphoreCount = 1;
-        submit_info.pSignalSemaphores = &img_rel_semaphore;
+        submit_info.pSignalSemaphores = &img_rel_semaphore[frame_idx];
 
-        vkQueueSubmit(vk_queue, 1, &submit_info, VK_NULL_HANDLE);
+        vkQueueSubmit(vk_queue, 1, &submit_info, end_of_frame_fences[frame_idx]);
 
         VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
         present_info.waitSemaphoreCount = 1;
-        present_info.pWaitSemaphores = &img_rel_semaphore;
+        present_info.pWaitSemaphores = &img_rel_semaphore[frame_idx];
         present_info.swapchainCount = 1;
         present_info.pSwapchains = &vk_swapchain;
         present_info.pImageIndices = &img_idx;
 
         VK_CHECK(vkQueuePresentKHR(vk_queue, &present_info));
-        VK_CHECK(vkDeviceWaitIdle(vk_device));
+        // VK_CHECK(vkDeviceWaitIdle(vk_device));
         // TODO(): this waitdeviceidle is a workaround because a) we do not have a fence
         // to wait for rendering to finish b) we dont double/tripple buffer the necessary
         // structures to have multiple frames in-flight at a time.
@@ -890,7 +920,7 @@ int main(int argc, char** argv)
 
             LOG("Window size changed: w %u h %u. Recreating the swapchain.", surface_width, surface_height);
 
-            vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_width, surface_height);
+            vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_count, surface_width, surface_height);
 
             u32 new_swapchain_image_count = 0;
             VK_CHECK(vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &new_swapchain_image_count, nullptr));
@@ -925,8 +955,11 @@ int main(int argc, char** argv)
             }
         }
 
-        ++frame_idx;
+        ++frame_count;
+        LOG("Frame %d[%d] Time: %f ms",frame_count, frame_idx, tick_ms(&frame_timer));
     }
+
+    VK_CHECK(vkDeviceWaitIdle(vk_device));
 
     shader_compiler_shutdown();
 
@@ -936,11 +969,17 @@ int main(int argc, char** argv)
     vkDestroyPipelineLayout(vk_device, triangle_layout, nullptr);
     vkDestroyPipeline(vk_device, triangle_pipeline, nullptr);
 
-    vkDestroySemaphore(vk_device, img_acq_semaphore, nullptr);
-    vkDestroySemaphore(vk_device, img_rel_semaphore, nullptr);
+    for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        vkDestroyFence(vk_device, end_of_frame_fences[i], nullptr);
+
+    for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        vkDestroySemaphore(vk_device, img_acq_semaphore[i], nullptr);
+    
+    for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        vkDestroySemaphore(vk_device, img_rel_semaphore[i], nullptr);
 
     vkDestroyRenderPass(vk_device, vk_render_pass, nullptr);
-    vkDestroyCommandPool(vk_device, vk_cmd_pool, nullptr);
+    vkDestroyCommandPool(vk_device, vk_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
 
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {

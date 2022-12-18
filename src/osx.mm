@@ -42,7 +42,6 @@ bool platform_is_debugger_present()
     assert(junk == 0);
 
     // We're being debugged if the P_TRACED flag is set.
-
     return ( (info.kp_proc.p_flag & P_TRACED) != 0 );
 }
 
@@ -670,7 +669,7 @@ Option<u64> get_file_size(File_Handle file)
     return result;
 }
 
-Option<u64> read_file(File_Handle file, Slice<u8> dst, u64 num_bytes)
+Option<u64> read_file(File_Handle file, Array<u8> dst, u64 num_bytes)
 {
     Option<u64> result = {};
     if (!is_file_valid(file))

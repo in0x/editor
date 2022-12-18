@@ -39,6 +39,7 @@ void* arena_push(Arena *arena, u64 num_bytes)
 
     void* allocation = (u8 *)arena->buffer + arena->bytes_allocated;
     arena->bytes_allocated += num_bytes;
+    memset(allocation, 0, num_bytes);
     return allocation;
 }
 

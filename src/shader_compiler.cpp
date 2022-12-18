@@ -120,7 +120,7 @@ namespace glslang
         }};
 }
 
-Slice<u8> load_file(String file_path, Arena* arena)
+Array<u8> load_file(String file_path, Arena* arena)
 {
     File_Handle file_handle = open_file(file_path);
     DEFER { log_last_platform_error(); };
@@ -140,7 +140,7 @@ Slice<u8> load_file(String file_path, Arena* arena)
     }
 
     u64 content_size = file_size_result.value + 1; // allocate an extra byte for the null-terminator.
-    Slice<u8> shader_data = arena_push_array<u8>(arena, content_size);
+    Array<u8> shader_data = arena_push_array<u8>(arena, content_size);
 
     Option<u64> read_result = read_file(file_handle, shader_data, file_size_result.value);
     if (!read_result.has_value)
@@ -194,7 +194,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 {
     ARENA_DEFER_CLEAR(ctx->tmp_bump);
 
-    Slice<u8> shader_code = load_file(src_path, ctx->tmp_bump);
+    Array<u8> shader_code = load_file(src_path, ctx->tmp_bump);
     if (!shader_code.is_valid())
     {
         LOG("Failed to load shader from %s", src_path.buffer);
@@ -255,7 +255,7 @@ VkShaderModule compile_shader(VkDevice vk_device, Shader_Stage::Enum stage, Stri
 
     glslang_program_SPIRV_generate(program, input.stage);
     size_t byte_code_size = glslang_program_SPIRV_get_size(program);
-    Slice<u32> byte_code = arena_push_array<u32>(ctx->bump, byte_code_size);
+    Array<u32> byte_code = arena_push_array<u32>(ctx->bump, byte_code_size);
 
     glslang_program_SPIRV_get(program, byte_code.array);
 

@@ -29,12 +29,13 @@ T* arena_push_t(Arena* arena)
 }
 
 template <typename T>
-struct Slice
+struct Array
 {
     T* array = nullptr;
-    u64 size = 0;
+    s64 size = 0;
+    s64 count = 0;
 
-    T& operator[](u64 idx)
+    T& operator[](s64 idx)
     {
         ASSERT(idx < size);
         return array[idx];
@@ -47,7 +48,7 @@ struct Slice
 
     T* end()
     {
-        return array + size;
+        return array + count;
     }
 
     bool is_valid() const
@@ -56,11 +57,45 @@ struct Slice
     }
 };
 
+
 template <typename T>
-Slice<T> arena_push_array(Arena* arena, u64 size)
+T* array_push(Array<T>* arr, bool assert_on_fail = true)
+{
+    if (arr->count >= arr->size)
+    {
+        ASSERT_MSG(!assert_on_fail, "Exceeded array size when pushing");
+        return nullptr;
+    }
+
+    return &(arr->operator[](arr->count++));    
+}
+
+template <typename T>
+bool array_push(Array<T>* arr, T const& v, bool assert_on_fail = true)
+{
+    T* nv = array_push(arr, assert_on_fail);
+    if (!nv) return false;
+    *nv = v;
+    return true;
+}
+
+template <typename T>
+T* try_array_push(Array<T>* arr)
+{
+    return array_push(arr, false);
+}
+
+template <typename T>
+bool try_array_push(Array<T>* arr, T const& v)
+{
+    return array_push(arr, v, false);
+}
+
+template <typename T>
+Array<T> arena_push_array(Arena* arena, s64 size, s64 count = 0)
 {
     void* allocation = arena_push_a(arena, sizeof(T) * size, alignof(T));
-    return Slice<T>{(T*)allocation, size};
+    return Array<T>{(T*)allocation, size, count};
 }
 
 #define ARENA_DEFER_CLEAR(arena)                      \

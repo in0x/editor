@@ -12,14 +12,6 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "BuildProject",
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug",
-            "program": "${workspaceFolder}/editor.app",
-            "args": [],
-            "cwd": "${workspaceFolder}",
         }
     ],
 }

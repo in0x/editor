@@ -21,6 +21,11 @@ static T clamp(T v, T min, T max) {
     else return v; 
 }
 
+template <typename T>
+static T lerp(T a, T b, f32 t) {
+    return a * t + b * (1.0 - t);
+}
+
 struct Vector3
 {
     f32 x = 0.0f;        
@@ -104,6 +109,26 @@ Vector3& Vector3::operator*=(f32 val)
 {
     *this = vec3_mul(*this, val);
     return *this;
+}
+
+static Vector3 operator+(Vector3 const& lhs, Vector3 const& rhs)
+{
+    return vec3_add(lhs, rhs);
+}
+
+static Vector3 operator*(Vector3 const& lhs, Vector3 const& rhs)
+{
+    return vec3_mul(lhs, rhs);
+}
+
+static Vector3 operator+(Vector3 const& v, f32 s)
+{
+    return vec3_add(v, s);
+}
+
+static Vector3 operator*(Vector3 const& v, f32 s)
+{
+    return vec3_mul(v, s);
 }
 
 // We use column major convention.

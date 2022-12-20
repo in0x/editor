@@ -19,7 +19,6 @@ Timer make_timer()
     return timer;
 }
 
-// stamp the timer and return elapsed units since last tick
 u64 tick(Timer* timer)
 {
     u64 now = 0;
@@ -28,21 +27,19 @@ u64 tick(Timer* timer)
 #else
     static_assert(false);
 #endif
-    f64 elapsed = now - timer->last_ticks;
+    u64 elapsed = now - timer->last_ticks;
     timer->last_ticks = now;
     return elapsed;
 }
 
-// same as tick, but returns elapsed milliseconds
 f64 tick_ms(Timer* timer)
 {
     u64 elapsed = tick(timer);
-    return elapsed / (1'000'000llu * (f64)timer->tick_rate);
+    return elapsed * timer->tick_rate / 1'000'000.0;
 }
 
-// same as tick, but returns elapsed seconds
 f64 tick_s(Timer* timer)
 {
     u64 elapsed = tick(timer);
-    return elapsed / (1'000'000'000llu * (f64)timer->tick_rate);
+    return elapsed * timer->tick_rate / 1'000'000'000.0;
 }

@@ -7,6 +7,8 @@
 #include "timer.h"
 #include "vk.h"
 
+#define START_FENCES_SIGNALED 1
+
 constexpr s64 MAX_FRAMES_IN_FLIGHT = 2;
 
 #define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
@@ -157,12 +159,14 @@ static VkInstance create_vk_instance()
 #elif PLATFORM_OSX
         "VK_EXT_metal_surface",
         VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 #endif
     };
 
     create_info.ppEnabledExtensionNames = extensions;
     create_info.enabledExtensionCount = ARRAYSIZE(extensions);
+    create_info.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
     VkInstance vk_instance = VK_NULL_HANDLE;
     VK_CHECK(vkCreateInstance(&create_info, nullptr, &vk_instance));
@@ -503,9 +507,9 @@ int main(int argc, char** argv)
     // allocations vs permanent mesh data alloc. With two, the helpers go on the temp (freed per scope or once
     // per frame -> then we can have two for rendering last frame async), the mesh data goes on the permanent stack.
     Arena program_lifetime_allocator = arena_allocate(1024 * 1024 * 10); // Give ourselves 10 MiB of memory to place global lifetime allocs.
-    Arena temporary_lifetime_allocator = arena_allocate(1024 * 1024);  // And 1 MiB for temporary allocations (lifetime < 1 frame). 
-    DEFER  { 
-        arena_free(&program_lifetime_allocator); 
+    Arena temporary_lifetime_allocator = arena_allocate(1024 * 1024);  // And 1 MiB for temporary allocations (lifetime < 1 frame).
+    DEFER  {
+        arena_free(&program_lifetime_allocator);
         arena_free(&temporary_lifetime_allocator); };
     Context ctx;
     ctx.bump = &program_lifetime_allocator;
@@ -627,7 +631,9 @@ int main(int argc, char** argv)
     VkFence end_of_frame_fences[MAX_FRAMES_IN_FLIGHT] = {};
     {
         VkFenceCreateInfo create_info = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+#if START_FENCES_SIGNALED
         create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+#endif
         for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
             VK_CHECK(vkCreateFence(vk_device, &create_info, nullptr, &end_of_frame_fences[i]));
@@ -661,7 +667,7 @@ int main(int argc, char** argv)
         VkPipelineLayoutCreateInfo create_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         create_info.pPushConstantRanges = &push_constants;
         create_info.pushConstantRangeCount = 1;
-    
+
         VK_CHECK(vkCreatePipelineLayout(vk_device, &create_info, nullptr, &triangle_layout));
     }
 
@@ -766,22 +772,26 @@ int main(int argc, char** argv)
         }
 
         u64 const max_timeout = ~0ull;
-        s64 frame_idx = frame_count % MAX_FRAMES_IN_FLIGHT;
-
-        vkWaitForFences(vk_device, 1, &end_of_frame_fences[frame_idx], VK_TRUE, max_timeout);
-        vkResetFences(vk_device, 1, &end_of_frame_fences[frame_idx]);
-
+        
+#if !START_FENCES_SIGNALED
+        if (frame_count >= MAX_FRAMES_IN_FLIGHT) // looks like the validation crash is related to creating fences in initial signaled state!
+#endif
+        {
+            vkWaitForFences(vk_device, 1, &end_of_frame_fences[frame_idx], VK_TRUE, max_timeout);
+            vkResetFences(vk_device, 1, &end_of_frame_fences[frame_idx]);
+        }
+        
         u32 img_idx = 0;
         VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore[frame_idx], VK_NULL_HANDLE, &img_idx);
         VK_CHECK(get_next_img_result);
-
         // VkCommandPoolResetFlags pool_reset_flags = 0;
         // VK_CHECK(vkResetCommandPool(vk_device, vk_cmd_pool, pool_reset_flags));
 
+        VkCommandBuffer frame_cmds = vk_cmd_buffers[frame_idx];
+        vkResetCommandBuffer(frame_cmds, 0);
+
         VkCommandBufferBeginInfo begin_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        VkCommandBuffer frame_cmds = vk_cmd_buffers[frame_idx];
 
         VK_CHECK(vkBeginCommandBuffer(frame_cmds, &begin_info));
 
@@ -958,7 +968,6 @@ int main(int argc, char** argv)
         }
 
         ++frame_count;
-        LOG("Frame %d[%d] Time: %f ms",frame_count, frame_idx, tick_ms(&frame_timer));
     }
 
     VK_CHECK(vkDeviceWaitIdle(vk_device));
@@ -976,7 +985,7 @@ int main(int argc, char** argv)
 
     for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         vkDestroySemaphore(vk_device, img_acq_semaphore[i], nullptr);
-    
+
     for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         vkDestroySemaphore(vk_device, img_rel_semaphore[i], nullptr);
 

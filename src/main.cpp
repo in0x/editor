@@ -761,8 +761,14 @@ int main(int argc, char** argv)
     Vector3 camera_pos;
     Vector3 camera_vel;
 
+    f64 t_since_step = 0;
+    f64 step_ms = 16.6; // step physics at 60 hz
     while (!platform_window_closing(main_window_handle))
     {
+        s64 frame_idx = frame_count % MAX_FRAMES_IN_FLIGHT;
+        f64 dt = tick_ms(&frame_timer);
+        LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt);
+
         Input_Events input_events = {};
         platform_pump_events(platform_app, main_window_handle, &input_events);
 
@@ -843,14 +849,16 @@ int main(int argc, char** argv)
 
         vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
 
-        camera_vel *= 0.95f; 
+        f32 step_s = step_ms / 1000.0f;
+        f32 drag = 0.95f;
+        f32 accel = 0.2f * step_s;
+        if (input_events.key_down[Input_Key_Code::A]) camera_vel.x += accel;
+        if (input_events.key_down[Input_Key_Code::D]) camera_vel.x -= accel;
+        if (input_events.key_down[Input_Key_Code::S]) camera_vel.y += accel;
+        if (input_events.key_down[Input_Key_Code::W]) camera_vel.y -= accel;
 
-        if (input_events.key_down[Input_Key_Code::A]) camera_vel.x -= -0.025f;
-        if (input_events.key_down[Input_Key_Code::D]) camera_vel.x += -0.025f;
-        if (input_events.key_down[Input_Key_Code::S]) camera_vel.y -= -0.025f;
-        if (input_events.key_down[Input_Key_Code::W]) camera_vel.y += -0.025f;
-
-        camera_vel = clamp(camera_vel, -0.05f, 0.05f);
+        camera_vel *= drag;
+        camera_vel = clamp(camera_vel, -1.f, 1.f);
         camera_pos += camera_vel;
 
         Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));

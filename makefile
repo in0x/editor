@@ -16,7 +16,7 @@ ${build_dir}/editor: ${obj_files}
 	clang++ ${obj_files} -o ${build_dir}/editor ${linker_flags}
 
 compile_flags := -std=c++17 -c -Wall -g
-include_flags := -D VK_USE_PLATFORM_MACOS_MVK -D _DEBUG -I $$VULKAN_SDK/${vk_ver}/MacOS/include/glslang/Include -I $$VULKAN_SDK/${vk_ver}/MoltenVK/include
+include_flags := -D VK_USE_PLATFORM_MACOS_MVK -D VK_USE_PLATFORM_METAL_EXT -D _DEBUG -I $$VULKAN_SDK/${vk_ver}/MacOS/include/glslang/Include -I $$VULKAN_SDK/${vk_ver}/MoltenVK/include
 build_cmd = clang++ ${compile_flags} $< -o $@ ${include_flags}
 
 # TODO we dont depend on header files in any way..

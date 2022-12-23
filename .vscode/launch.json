@@ -12,6 +12,7 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "BuildProject",
+            // "visualizerFile": "${workspaceFolder}/src/editor.natvis",
         }
     ],
 }

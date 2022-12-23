@@ -7,7 +7,7 @@
 #include "timer.h"
 #include "vk.h"
 
-#define START_FENCES_SIGNALED 1
+#define START_FENCES_SIGNALED 0
 
 constexpr s64 MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -476,11 +476,11 @@ void print_matrix(Matrix4 const& m)
 }
 
 // todo:
+// framerate independent camera movement
 // finish going through vulkan tutorial
 // natvis for Array<T>
 // render cube geometry
 // free cam
-//  mouse input
 // window doesnt background
 // VK_KHR_dynamic_rendering
 // gpu text rendering
@@ -767,18 +767,17 @@ int main(int argc, char** argv)
     {
         s64 frame_idx = frame_count % MAX_FRAMES_IN_FLIGHT;
         f64 dt = tick_ms(&frame_timer);
-        LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt);
+        // LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt);
 
-        Input_Events input_events = {};
-        platform_pump_events(platform_app, main_window_handle, &input_events);
+        Input_State const* input_state = platform_pump_events(platform_app, main_window_handle);
 
-        if (input_events.key_down[Input_Key_Code::ESC])
+        if (input_state->key_down[Input_Key_Code::ESC])
         {
             break;
         }
 
         u64 const max_timeout = ~0ull;
-        
+
 #if !START_FENCES_SIGNALED
         if (frame_count >= MAX_FRAMES_IN_FLIGHT) // looks like the validation crash is related to creating fences in initial signaled state!
 #endif
@@ -786,7 +785,7 @@ int main(int argc, char** argv)
             vkWaitForFences(vk_device, 1, &end_of_frame_fences[frame_idx], VK_TRUE, max_timeout);
             vkResetFences(vk_device, 1, &end_of_frame_fences[frame_idx]);
         }
-        
+
         u32 img_idx = 0;
         VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore[frame_idx], VK_NULL_HANDLE, &img_idx);
         VK_CHECK(get_next_img_result);
@@ -852,10 +851,10 @@ int main(int argc, char** argv)
         f32 step_s = step_ms / 1000.0f;
         f32 drag = 0.95f;
         f32 accel = 0.2f * step_s;
-        if (input_events.key_down[Input_Key_Code::A]) camera_vel.x += accel;
-        if (input_events.key_down[Input_Key_Code::D]) camera_vel.x -= accel;
-        if (input_events.key_down[Input_Key_Code::S]) camera_vel.y += accel;
-        if (input_events.key_down[Input_Key_Code::W]) camera_vel.y -= accel;
+        if (input_state->key_down[Input_Key_Code::A]) camera_vel.x += accel;
+        if (input_state->key_down[Input_Key_Code::D]) camera_vel.x -= accel;
+        if (input_state->key_down[Input_Key_Code::S]) camera_vel.y += accel;
+        if (input_state->key_down[Input_Key_Code::W]) camera_vel.y -= accel;
 
         camera_vel *= drag;
         camera_vel = clamp(camera_vel, -1.f, 1.f);
@@ -910,10 +909,6 @@ int main(int argc, char** argv)
         present_info.pImageIndices = &img_idx;
 
         VK_CHECK(vkQueuePresentKHR(vk_queue, &present_info));
-        // VK_CHECK(vkDeviceWaitIdle(vk_device));
-        // TODO(): this waitdeviceidle is a workaround because a) we do not have a fence
-        // to wait for rendering to finish b) we dont double/tripple buffer the necessary
-        // structures to have multiple frames in-flight at a time.
 
         if (platform_did_window_size_change(main_window_handle) ||
             get_next_img_result == VK_ERROR_OUT_OF_DATE_KHR     ||

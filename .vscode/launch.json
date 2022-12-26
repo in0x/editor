@@ -5,14 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
-            "request": "launch",
             "name": "Compile and Debug",
+            "type": "cppdbg",
+            "request": "launch",
             "program": "${workspaceFolder}/editor.app",
             "args": [],
             "cwd": "${workspaceFolder}",
+            "environment": [],
+            // "stopAtEntry": true,
+            "externalConsole": false,
+            "MIMode": "lldb",
             "preLaunchTask": "BuildProject",
-            // "visualizerFile": "${workspaceFolder}/src/editor.natvis",
-        }
+            "visualizerFile": "${workspaceFolder}/src/editor.natvis"
+          }
     ],
 }

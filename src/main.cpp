@@ -7,8 +7,6 @@
 #include "timer.h"
 #include "vk.h"
 
-#define START_FENCES_SIGNALED 0
-
 constexpr s64 MAX_FRAMES_IN_FLIGHT = 2;
 
 #define ASSERT_IF_ERROR_ELSE_LOG(condition, fmt_string, ...) \
@@ -631,9 +629,8 @@ int main(int argc, char** argv)
     VkFence end_of_frame_fences[MAX_FRAMES_IN_FLIGHT] = {};
     {
         VkFenceCreateInfo create_info = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-#if START_FENCES_SIGNALED
         create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-#endif
+
         for (s64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
             VK_CHECK(vkCreateFence(vk_device, &create_info, nullptr, &end_of_frame_fences[i]));
@@ -767,7 +764,7 @@ int main(int argc, char** argv)
     {
         s64 frame_idx = frame_count % MAX_FRAMES_IN_FLIGHT;
         f64 dt = tick_ms(&frame_timer);
-        // LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt);
+        LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt);
 
         Input_State const* input_state = platform_pump_events(platform_app, main_window_handle);
 
@@ -778,13 +775,8 @@ int main(int argc, char** argv)
 
         u64 const max_timeout = ~0ull;
 
-#if !START_FENCES_SIGNALED
-        if (frame_count >= MAX_FRAMES_IN_FLIGHT) // looks like the validation crash is related to creating fences in initial signaled state!
-#endif
-        {
-            vkWaitForFences(vk_device, 1, &end_of_frame_fences[frame_idx], VK_TRUE, max_timeout);
-            vkResetFences(vk_device, 1, &end_of_frame_fences[frame_idx]);
-        }
+        vkWaitForFences(vk_device, 1, &end_of_frame_fences[frame_idx], VK_TRUE, max_timeout);
+        vkResetFences(vk_device, 1, &end_of_frame_fences[frame_idx]);
 
         u32 img_idx = 0;
         VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore[frame_idx], VK_NULL_HANDLE, &img_idx);

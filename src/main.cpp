@@ -474,21 +474,20 @@ void print_matrix(Matrix4 const& m)
 }
 
 // todo:
-// framerate independent camera movement
 // finish going through vulkan tutorial
-// natvis for Array<T>
 // render cube geometry
 // free cam
+// font rendering
 // window doesnt background
 // VK_KHR_dynamic_rendering
-// gpu text rendering
 // depth map
 // model loading
 // deffered render
 // basic lighting
 //  pbr
 //  point / spot / directional
-// font rendering
+// natvis for Array<T>
+// gpu text rendering
 // imgui or custom ui
 // physics
 // animation
@@ -755,16 +754,16 @@ int main(int argc, char** argv)
 
     Timer frame_timer = make_timer();
     s64 frame_count = 0;
-    Vector3 camera_pos;
-    Vector3 camera_vel;
+    Vector3 camera_pos = {};
+    Vector3 camera_vel = {};
 
-    f64 t_since_step = 0;
-    f64 step_ms = 16.6; // step physics at 60 hz
+    f64 s_since_step = 0;
+    f64 const step_len_s = 16.6 / 1000.0; // step physics at 60 hz
     while (!platform_window_closing(main_window_handle))
     {
         s64 frame_idx = frame_count % MAX_FRAMES_IN_FLIGHT;
-        f64 dt = tick_ms(&frame_timer);
-        LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt);
+        f64 dt_s = tick_ms(&frame_timer);
+        // LOG("Frame %d[%d] Time: %f ms", frame_count, frame_idx, dt_s);
 
         Input_State const* input_state = platform_pump_events(platform_app, main_window_handle);
 
@@ -840,18 +839,27 @@ int main(int argc, char** argv)
 
         vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
 
-        f32 step_s = step_ms / 1000.0f;
-        f32 drag = 0.95f;
-        f32 accel = 0.2f * step_s;
-        if (input_state->key_down[Input_Key_Code::A]) camera_vel.x += accel;
-        if (input_state->key_down[Input_Key_Code::D]) camera_vel.x -= accel;
-        if (input_state->key_down[Input_Key_Code::S]) camera_vel.y += accel;
-        if (input_state->key_down[Input_Key_Code::W]) camera_vel.y -= accel;
+        s_since_step += dt_s;
+        Vector3 prev_camera_pos = camera_pos;
+        while (s_since_step >= step_len_s)
+        {
+            prev_camera_pos = camera_pos;
 
-        camera_vel *= drag;
-        camera_vel = clamp(camera_vel, -1.f, 1.f);
-        camera_pos += camera_vel;
+            f32 drag = 0.95f * step_len_s;
+            f32 accel = 0.2f * step_len_s;
+            if (input_state->key_down[Input_Key_Code::A]) camera_vel.x += accel;
+            if (input_state->key_down[Input_Key_Code::D]) camera_vel.x -= accel;
+            if (input_state->key_down[Input_Key_Code::S]) camera_vel.y += accel;
+            if (input_state->key_down[Input_Key_Code::W]) camera_vel.y -= accel;
 
+            camera_vel *= drag;
+            camera_vel = clamp(camera_vel, -1.f, 1.f);
+            camera_pos += camera_vel;
+
+            s_since_step -= step_len_s;
+        }
+        camera_pos = lerp(camera_pos, prev_camera_pos, s_since_step / step_len_s);
+        
         Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));
         Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
 

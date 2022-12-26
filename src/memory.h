@@ -57,7 +57,6 @@ struct Array
     }
 };
 
-
 template <typename T>
 T* array_push(Array<T>* arr, bool assert_on_fail = true)
 {

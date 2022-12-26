@@ -16,7 +16,8 @@
             "externalConsole": false,
             "MIMode": "lldb",
             "preLaunchTask": "BuildProject",
-            "visualizerFile": "${workspaceFolder}/src/editor.natvis"
+            "visualizerFile": "${workspaceFolder}/src/editor.natvis",
+            "showDisplayString": true,
           }
     ],
 }

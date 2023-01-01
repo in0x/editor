@@ -475,6 +475,7 @@ void print_matrix(Matrix4 const& m)
 
 // todo:
 // generate header file dependencies using compiler and use them in make file as dependencies of .mm / .cpp / .c files
+// take window focus on launch so we can ESC-close right away
 // finish going through vulkan tutorial
 // render cube geometry
 // free cam

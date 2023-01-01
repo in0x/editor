@@ -1,4 +1,3 @@
-#pragma once
 #include "timer.h" 
 #include "core.h"
 

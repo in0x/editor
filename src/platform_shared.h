@@ -1,5 +1,14 @@
 #pragma once
 
+struct Create_Window_Params
+{
+    s32 x = 0;
+    s32 y = 0;
+    s32 width = 0;
+    s32 height = 0;
+    char const* title = nullptr;
+};
+
 enum File_Mode
 {
     None = 0,

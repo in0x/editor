@@ -693,6 +693,17 @@ void platform_destroy_app(Platform_App app)
     delete app.impl;
 }
 
+Screen_Props platform_get_main_window_props()
+{
+    NSScreen* mainScreen = [NSScreen mainScreen];
+    NSRect screenFrame = [mainScreen frame];
+
+    Screen_Props props = {};
+    props.width = screenFrame.size.width;
+    props.height = screenFrame.size.height;    
+    return props;
+}
+
 Platform_Window platform_create_window(Platform_App app, Create_Window_Params params)
 {
     Platform_Window window_wrapper = {};
@@ -704,7 +715,10 @@ Platform_Window platform_create_window(Platform_App app, Create_Window_Params pa
         window->delegate = [[WindowDelegate alloc] init:window];
         assert(window->delegate != nil);
 
-        NSRect windowRect = NSMakeRect(params.x, params.y, params.width, params.height);
+        Screen_Props main_screen_props = platform_get_main_window_props();
+        s32 win_orig_y = main_screen_props.height - params.y - params.height;
+        s32 win_orig_x = params.x;
+        NSRect windowRect = NSMakeRect(win_orig_x, win_orig_y, params.width, params.height);
 
         NSUInteger windowStyle = NSWindowStyleMaskMiniaturizable |
                                NSWindowStyleMaskTitled |

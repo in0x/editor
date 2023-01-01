@@ -474,6 +474,7 @@ void print_matrix(Matrix4 const& m)
 }
 
 // todo:
+// generate header file dependencies using compiler and use them in make file as dependencies of .mm / .cpp / .c files
 // finish going through vulkan tutorial
 // render cube geometry
 // free cam
@@ -534,11 +535,12 @@ int main(int argc, char** argv)
     VkInstance vk_instance = create_vk_instance();
     volkLoadInstanceOnly(vk_instance);
 
+    Screen_Props main_screen_props = platform_get_main_window_props();
     Create_Window_Params window_params = {};
-    window_params.x = 200;
-    window_params.y = 400;
-    window_params.width = 500;
-    window_params.height = 500;
+    window_params.width = 200;
+    window_params.height = 200;
+    window_params.x = main_screen_props.width - window_params.width;
+    window_params.y = 300;
     // window_params.class_name = L"editor_window_class";
     window_params.title = "Editor";
     Platform_Window main_window_handle = platform_create_window(platform_app, window_params);
@@ -845,15 +847,15 @@ int main(int argc, char** argv)
         {
             prev_camera_pos = camera_pos;
 
-            f32 drag = 0.95f * step_len_s;
-            f32 accel = 0.2f * step_len_s;
+            f32 drag = 0.95f;
+            f32 accel = 0.0001f * step_len_s;
             if (input_state->key_down[Input_Key_Code::A]) camera_vel.x += accel;
             if (input_state->key_down[Input_Key_Code::D]) camera_vel.x -= accel;
             if (input_state->key_down[Input_Key_Code::S]) camera_vel.y += accel;
             if (input_state->key_down[Input_Key_Code::W]) camera_vel.y -= accel;
 
             camera_vel *= drag;
-            camera_vel = clamp(camera_vel, -1.f, 1.f);
+            camera_vel = clamp(camera_vel, -0.0001f, 0.0001f);
             camera_pos += camera_vel;
 
             s_since_step -= step_len_s;

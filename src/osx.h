@@ -4,12 +4,13 @@
 #include "memory.h"
 #include "stdio.h"
 
-bool platform_is_debugger_present();
-
+struct Create_Window_Params;
 struct Input_State;
 struct OSX_Window_Impl;
 struct OSX_App_Impl;
 struct String;
+
+bool platform_is_debugger_present();
 
 struct Platform_App
 {
@@ -24,20 +25,11 @@ struct Platform_Window
     OSX_Window_Impl* impl;
 };
 
-struct Create_Window_Params
-{
-    u32 x = 0;
-    u32 y = 0;
-    u32 width = 0;
-    u32 height = 0;
-    char const* title = nullptr;
-};
+struct Screen_Props { s32 width = 0; s32 height = 0; };
 
-struct Window_Size
-{
-    u32 width = 0;
-    u32 height = 0;
-};
+Screen_Props platform_get_main_window_props();
+
+struct Window_Size { s32 width = 0; s32 height = 0; };
 
 Platform_Window platform_create_window(Platform_App app, Create_Window_Params params);
 bool platform_window_closing(Platform_Window window);

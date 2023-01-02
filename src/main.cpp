@@ -475,7 +475,7 @@ void print_matrix(Matrix4 const& m)
 
 // todo:
 // finish going through vulkan tutorial
-// render cube geometry
+// indexed cube geometry (smooth color interpolation)
 // take window focus on launch so we can ESC-close right away
 // free cam
 // font rendering
@@ -653,18 +653,56 @@ int main(int argc, char** argv)
 
     enum VAttr { Pos = 0, Col = 1, Count };
 
-    Vector3 const tri_vpos[] = 
+    // Vector3 const vertices[] = 
+    // {
+    //     Vector3{ 0.0f,  0.5f, 0.0f},
+    //     Vector3{ 0.5f, -0.5f, 0.0f},
+    //     Vector3{-0.5f, -0.5f, 0.0f},
+    // };
+
+    // Vector3 const colors[] = 
+    // {
+    //     Vector3{1.0f, 0.0f, 0.0f},
+    //     Vector3{0.0f, 1.0f, 0.0f},
+    //     Vector3{0.0f, 0.0f, 1.0f},
+    // };
+
+    Vector3 const vertices[] = 
     {
-        Vector3{ 0.0f,  0.5f, 0.0f},
-        Vector3{ 0.5f, -0.5f, 0.0f},
-        Vector3{-0.5f, -0.5f, 0.0f},
+        // front
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ -0.5f, 0.5f, -0.5f}, Vector3{0.5f, 0.5f,  -0.5f},
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, 0.5f, -0.5f}, 
+        // back
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ -0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f,  0.5f},
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, 0.5f, 0.5f}, 
+        // top
+        Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
+        Vector3{0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f},
+        // bottom
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, -0.5f},
+        Vector3{0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, 0.5f},
+        // left
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f},
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{-0.5f, 0.5f, -0.5f},
+        // right
+        Vector3{0.5f, -0.5f, -0.5f}, Vector3{0.5f, 0.5f, -0.5f}, Vector3{0.5f, -0.5f, 0.5f},
+        Vector3{0.5f, -0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
     };
 
-    Vector3 const tri_vcols[] = 
+    Vector3 const colors[] = 
     {
-        Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
     };
 
     // TODO(): Configure later
@@ -778,13 +816,13 @@ int main(int argc, char** argv)
     VkBuffer vbufs[VAttr::Count] = {};
     {
         VkBufferCreateInfo create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        create_info.size = sizeof(tri_vpos);
+        create_info.size = sizeof(vertices);
         create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         create_info.flags = 0;
     
         VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Pos]));
-        create_info.size = sizeof(tri_vcols);
+        create_info.size = sizeof(colors);
         VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Col]));
     }
 
@@ -827,13 +865,13 @@ int main(int argc, char** argv)
         vkBindBufferMemory(vk_device, vbufs[VAttr::Col], vmems[VAttr::Col], 0);
     
         void* pos_mem_dst = nullptr;
-        vkMapMemory(vk_device, vmems[VAttr::Pos], 0, sizeof(tri_vpos), 0, &pos_mem_dst);
-        memcpy(pos_mem_dst, tri_vpos, sizeof(tri_vpos));
+        vkMapMemory(vk_device, vmems[VAttr::Pos], 0, sizeof(vertices), 0, &pos_mem_dst);
+        memcpy(pos_mem_dst, vertices, sizeof(vertices));
         vkUnmapMemory(vk_device, vmems[VAttr::Pos]);
 
         void* col_mem_dst = nullptr;
-        vkMapMemory(vk_device, vmems[VAttr::Col], 0, sizeof(tri_vcols), 0, &col_mem_dst);
-        memcpy(col_mem_dst, tri_vcols, sizeof(tri_vcols));
+        vkMapMemory(vk_device, vmems[VAttr::Col], 0, sizeof(colors), 0, &col_mem_dst);
+        memcpy(col_mem_dst, colors, sizeof(colors));
         vkUnmapMemory(vk_device, vmems[VAttr::Col]);
     }
 
@@ -967,14 +1005,14 @@ int main(int argc, char** argv)
         }
         camera_pos = lerp(camera_pos, prev_camera_pos, s_since_step / step_len_s);
         
-        Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -1.f}));
+        Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -2.0f}));
         Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
 
         Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_count) * 0.4f, 0.f});
         Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
 
         vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
-        vkCmdDraw(frame_cmds, ARRAYSIZE(tri_vpos), 1, 0, 0);
+        vkCmdDraw(frame_cmds, ARRAYSIZE(vertices), 1, 0, 0);
 
         vkCmdEndRenderPass(frame_cmds);
 

@@ -109,6 +109,13 @@ struct Option
 };
 
 template <typename T>
+static T const& operator*(Option<T> const& opt)
+{
+    ASSERT(opt.has_value);
+    return opt.value;
+}
+
+template <typename T>
 void option_set(Option<T>* option, T value)
 {
     option->value = value;

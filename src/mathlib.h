@@ -26,6 +26,12 @@ static T lerp(T a, T b, f32 t) {
     return a * t + b * (1.0 - t);
 }
 
+struct Vector2
+{
+    f32 x = 0.0f;
+    f32 y = 0.0f;
+};
+
 struct Vector3
 {
     f32 x = 0.0f;        

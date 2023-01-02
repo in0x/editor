@@ -230,7 +230,7 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
         u32 ext_count = 0;
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, nullptr);
 
-        Array<VkExtensionProperties> available_exts = arena_push_array<VkExtensionProperties>(ctx.tmp_bump, ext_count, ext_count);
+        Array<VkExtensionProperties> available_exts = arena_push_array_with_count<VkExtensionProperties>(ctx.tmp_bump, ext_count, ext_count);
         vkEnumerateDeviceExtensionProperties(phys_devices[i], nullptr, &ext_count, available_exts.array);
 
         bool has_all_exts = true;
@@ -375,7 +375,7 @@ static VkFormat get_swapchain_fmt(VkPhysicalDevice vk_phys_device, VkSurfaceKHR 
     u32 fmt_count = 0;
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, nullptr));
 
-    Array<VkSurfaceFormatKHR> fmts = arena_push_array<VkSurfaceFormatKHR>(ctx.tmp_bump, fmt_count, fmt_count);
+    Array<VkSurfaceFormatKHR> fmts = arena_push_array_with_count<VkSurfaceFormatKHR>(ctx.tmp_bump, fmt_count, fmt_count);
     VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys_device, vk_surface, &fmt_count, fmts.array));
 
     if ((fmt_count == 1) && (fmts[0].format == VK_FORMAT_UNDEFINED))
@@ -474,10 +474,9 @@ void print_matrix(Matrix4 const& m)
 }
 
 // todo:
-// generate header file dependencies using compiler and use them in make file as dependencies of .mm / .cpp / .c files
-// take window focus on launch so we can ESC-close right away
 // finish going through vulkan tutorial
 // render cube geometry
+// take window focus on launch so we can ESC-close right away
 // free cam
 // font rendering
 // window doesnt background
@@ -538,8 +537,8 @@ int main(int argc, char** argv)
 
     Screen_Props main_screen_props = platform_get_main_window_props();
     Create_Window_Params window_params = {};
-    window_params.width = 200;
-    window_params.height = 200;
+    window_params.width = 400;
+    window_params.height = 400;
     window_params.x = main_screen_props.width - window_params.width;
     window_params.y = 300;
     // window_params.class_name = L"editor_window_class";
@@ -644,13 +643,29 @@ int main(int argc, char** argv)
 
     char shader_path[MAX_PATH] = "\0";
     strcpy(shader_path, root_dir);
-    strcat(shader_path, "src/shaders/triangle.vert.glsl");
+    strcat(shader_path, "src/shaders/basic.vert.glsl");
     VkShaderModule vert_shader = compile_shader(vk_device, Shader_Stage::vertex, String{shader_path, MAX_PATH}, &ctx);
 
     shader_path[0] = '\0';
     strcpy(shader_path, root_dir);
     strcat(shader_path, "src/shaders/triangle.frag.glsl");
     VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, String{shader_path, MAX_PATH}, &ctx);
+
+    enum VAttr { Pos = 0, Col = 1, Count };
+
+    Vector3 const tri_vpos[] = 
+    {
+        Vector3{ 0.0f,  0.5f, 0.0f},
+        Vector3{ 0.5f, -0.5f, 0.0f},
+        Vector3{-0.5f, -0.5f, 0.0f},
+    };
+
+    Vector3 const tri_vcols[] = 
+    {
+        Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 0.0f, 1.0f},
+    };
 
     // TODO(): Configure later
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
@@ -672,6 +687,26 @@ int main(int argc, char** argv)
 
     VkPipeline triangle_pipeline = VK_NULL_HANDLE;
     {
+
+        // TODO(): Automate with shader reflection
+        VkVertexInputBindingDescription vert_binds[VAttr::Count];
+        vert_binds[VAttr::Pos].binding = VAttr::Pos;
+        vert_binds[VAttr::Col].binding = VAttr::Col;
+        vert_binds[VAttr::Col].stride = sizeof(Vector3);
+        vert_binds[VAttr::Pos].stride = sizeof(Vector3);
+        vert_binds[VAttr::Pos].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        vert_binds[VAttr::Col].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription vert_attrs[VAttr::Count];
+        vert_attrs[VAttr::Pos].binding = VAttr::Pos;
+        vert_attrs[VAttr::Col].binding = VAttr::Col;
+        vert_attrs[VAttr::Pos].location = VAttr::Pos;
+        vert_attrs[VAttr::Col].location = VAttr::Col;
+        vert_attrs[VAttr::Pos].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vert_attrs[VAttr::Col].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vert_attrs[VAttr::Pos].offset = 0;
+        vert_attrs[VAttr::Col].offset = 0;
+
         VkGraphicsPipelineCreateInfo pipe_create_info = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
 
         VkPipelineShaderStageCreateInfo shader_stages[2] = {};
@@ -687,6 +722,10 @@ int main(int argc, char** argv)
         pipe_create_info.pStages = shader_stages;
 
         VkPipelineVertexInputStateCreateInfo vertex_input = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        vertex_input.vertexBindingDescriptionCount = VAttr::Count;
+        vertex_input.vertexAttributeDescriptionCount = VAttr::Count;
+        vertex_input.pVertexBindingDescriptions = vert_binds;
+        vertex_input.pVertexAttributeDescriptions = vert_attrs;
         pipe_create_info.pVertexInputState = &vertex_input;
 
         VkPipelineInputAssemblyStateCreateInfo input_assembly = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
@@ -734,6 +773,68 @@ int main(int argc, char** argv)
         pipe_create_info.renderPass = vk_render_pass;
 
         VK_CHECK(vkCreateGraphicsPipelines(vk_device, pipeline_cache, 1, &pipe_create_info, nullptr, &triangle_pipeline));
+    }
+
+    VkBuffer vbufs[VAttr::Count] = {};
+    {
+        VkBufferCreateInfo create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        create_info.size = sizeof(tri_vpos);
+        create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        create_info.flags = 0;
+    
+        VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Pos]));
+        create_info.size = sizeof(tri_vcols);
+        VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Col]));
+    }
+
+
+    VkDeviceMemory vmems[VAttr::Count] = {};
+    {
+        auto alloc_buffer_mem = [] (VkDevice vk_device, VkPhysicalDevice vk_phys_device, VkBuffer buffer, VkMemoryPropertyFlags mem_flags) -> VkDeviceMemory 
+        {            
+            VkMemoryRequirements mem_requs;
+            vkGetBufferMemoryRequirements(vk_device, buffer, &mem_requs);
+
+            VkPhysicalDeviceMemoryProperties mem_props;
+            vkGetPhysicalDeviceMemoryProperties(vk_phys_device, &mem_props);
+    
+            Option<u32> mem_idx;
+            for (u32 i = 0; i < mem_props.memoryTypeCount; ++i)
+            {
+                bool matches_mem_type = mem_requs.memoryTypeBits & (1 << i);
+                bool matches_mem_props = (mem_props.memoryTypes[i].propertyFlags & mem_flags) == mem_flags; 
+                if (matches_mem_type && matches_mem_props)
+                {
+                    option_set(&mem_idx, i);
+                    break;
+                }
+            }
+
+            VkMemoryAllocateInfo alloc_info = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+            alloc_info.allocationSize = mem_requs.size;
+            alloc_info.memoryTypeIndex = *mem_idx;
+        
+            VkDeviceMemory vk_mem = VK_NULL_HANDLE;
+            VK_CHECK(vkAllocateMemory(vk_device, &alloc_info, nullptr, &vk_mem));
+            return vk_mem;
+        };
+
+        VkMemoryPropertyFlags mem_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        vmems[VAttr::Pos] = alloc_buffer_mem(vk_device, vk_phys_device, vbufs[VAttr::Pos], mem_flags);
+        vmems[VAttr::Col] = alloc_buffer_mem(vk_device, vk_phys_device, vbufs[VAttr::Col], mem_flags);
+        vkBindBufferMemory(vk_device, vbufs[VAttr::Pos], vmems[VAttr::Pos], 0);
+        vkBindBufferMemory(vk_device, vbufs[VAttr::Col], vmems[VAttr::Col], 0);
+    
+        void* pos_mem_dst = nullptr;
+        vkMapMemory(vk_device, vmems[VAttr::Pos], 0, sizeof(tri_vpos), 0, &pos_mem_dst);
+        memcpy(pos_mem_dst, tri_vpos, sizeof(tri_vpos));
+        vkUnmapMemory(vk_device, vmems[VAttr::Pos]);
+
+        void* col_mem_dst = nullptr;
+        vkMapMemory(vk_device, vmems[VAttr::Col], 0, sizeof(tri_vcols), 0, &col_mem_dst);
+        memcpy(col_mem_dst, tri_vcols, sizeof(tri_vcols));
+        vkUnmapMemory(vk_device, vmems[VAttr::Col]);
     }
 
     VkCommandPool vk_cmd_pool = VK_NULL_HANDLE;
@@ -841,6 +942,9 @@ int main(int argc, char** argv)
         vkCmdSetScissor(frame_cmds, 0, 1, &scissor);
 
         vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
+        
+        VkDeviceSize buf_offsets[VAttr::Count] = {0, 0};
+        vkCmdBindVertexBuffers(frame_cmds, 0, 2, vbufs,buf_offsets);
 
         s_since_step += dt_s;
         Vector3 prev_camera_pos = camera_pos;
@@ -870,7 +974,7 @@ int main(int argc, char** argv)
         Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
 
         vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
-        vkCmdDraw(frame_cmds, 3, 1, 0, 0);
+        vkCmdDraw(frame_cmds, ARRAYSIZE(tri_vpos), 1, 0, 0);
 
         vkCmdEndRenderPass(frame_cmds);
 
@@ -997,6 +1101,11 @@ int main(int argc, char** argv)
 
     vkDestroyRenderPass(vk_device, vk_render_pass, nullptr);
     vkDestroyCommandPool(vk_device, vk_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
+    for (s32 i = 0; i < VAttr::Count; ++i)
+    {
+        vkFreeMemory(vk_device, vmems[i], nullptr);    
+        vkDestroyBuffer(vk_device, vbufs[i], nullptr);
+    }
 
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {

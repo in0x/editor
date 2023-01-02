@@ -91,7 +91,14 @@ bool try_array_push(Array<T>* arr, T const& v)
 }
 
 template <typename T>
-Array<T> arena_push_array(Arena* arena, s64 size, s64 count = 0)
+Array<T> arena_push_array(Arena* arena, s64 size)
+{
+    void* allocation = arena_push_a(arena, sizeof(T) * size, alignof(T));
+    return Array<T>{(T*)allocation, size, 0};
+}
+
+template <typename T>
+Array<T> arena_push_array_with_count(Arena* arena, s64 size, s64 count)
 {
     void* allocation = arena_push_a(arena, sizeof(T) * size, alignof(T));
     return Array<T>{(T*)allocation, size, count};

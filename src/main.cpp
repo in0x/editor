@@ -426,30 +426,47 @@ static VkSwapchainKHR create_vk_swapchain(VkDevice vk_device, VkSurfaceKHR vk_su
     return vk_swapchain;
 }
 
-static VkRenderPass create_vk_fullframe_renderpass(VkDevice vk_device, VkFormat swapchain_fmt)
+static VkRenderPass create_vk_fullframe_renderpass(VkDevice vk_device, VkFormat swapchain_fmt, VkFormat depth_fmt)
 {
-    VkAttachmentDescription attachment = {};
-    attachment.format = swapchain_fmt;
-    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentDescription cla = {};
+    cla.format = swapchain_fmt;
+    cla.samples = VK_SAMPLE_COUNT_1_BIT;
+    cla.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    cla.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    cla.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    cla.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    cla.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    cla.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference color_attachment = {};
-    color_attachment.attachment = 0;
-    color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference cl_ref = {};
+    cl_ref.attachment = 0;
+    cl_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentDescription dpa = {};
+    dpa.format = depth_fmt;
+    dpa.samples = VK_SAMPLE_COUNT_1_BIT;
+    dpa.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    dpa.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    dpa.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    dpa.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    dpa.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    dpa.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference dp_ref = {};
+    dp_ref.attachment = 1;
+    dp_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    
     VkSubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &color_attachment;
+    subpass.pColorAttachments = &cl_ref;
+    subpass.pDepthStencilAttachment = &dp_ref;
+
+    VkAttachmentDescription attach_descs[] = { cla, dpa };
 
     VkRenderPassCreateInfo create_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-    create_info.attachmentCount = 1;
-    create_info.pAttachments = &attachment;
+    create_info.attachmentCount = ARRAYSIZE(attach_descs);
+    create_info.pAttachments = attach_descs;
     create_info.subpassCount = 1;
     create_info.pSubpasses = &subpass;
 
@@ -475,13 +492,12 @@ void print_matrix(Matrix4 const& m)
 
 // todo:
 // finish going through vulkan tutorial
+// depth map
 // indexed cube geometry (smooth color interpolation)
-// take window focus on launch so we can ESC-close right away
 // free cam
 // font rendering
 // window doesnt background
 // VK_KHR_dynamic_rendering
-// depth map
 // model loading
 // deffered render
 // basic lighting
@@ -493,6 +509,198 @@ void print_matrix(Matrix4 const& m)
 // physics
 // animation
 // sound
+
+struct Tri_Geo
+{
+    constexpr static Vector3 vertices[] = 
+    {
+        Vector3{ 0.0f,  0.5f, 0.0f},
+        Vector3{ 0.5f, -0.5f, 0.0f},
+        Vector3{-0.5f, -0.5f, 0.0f},
+    };
+
+    constexpr static Vector3 colors[] = 
+    {
+        Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 0.0f, 1.0f},
+    };
+};
+
+struct Cube_Geo
+{
+    constexpr static Vector3 vertices[] = 
+    {
+        // front
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ -0.5f, 0.5f, -0.5f}, Vector3{0.5f, 0.5f,  -0.5f},
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, 0.5f, -0.5f}, 
+        // back
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ -0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f,  0.5f},
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, 0.5f, 0.5f}, 
+        // top
+        Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
+        Vector3{0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f},
+        // bottom
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, -0.5f},
+        Vector3{0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, 0.5f},
+        // left
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f},
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{-0.5f, 0.5f, -0.5f},
+        // right
+        Vector3{0.5f, -0.5f, -0.5f}, Vector3{0.5f, 0.5f, -0.5f}, Vector3{0.5f, -0.5f, 0.5f},
+        Vector3{0.5f, -0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
+    };
+
+    constexpr Vector3 static colors[] = 
+    {
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
+    };
+};
+
+static Option<u32> find_mem_idx(VkPhysicalDevice vk_physd, VkMemoryRequirements* requs, VkMemoryPropertyFlags flags)
+{
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(vk_physd, &mem_props);
+
+    Option<u32> mem_idx;
+    for (u32 i = 0; i < mem_props.memoryTypeCount; ++i)
+    {
+        bool matches_mem_type = requs->memoryTypeBits & (1 << i);
+        bool matches_mem_props = (mem_props.memoryTypes[i].propertyFlags & flags) == flags; 
+        if (matches_mem_type && matches_mem_props)
+        {
+            option_set(&mem_idx, i);
+            break;
+        }
+    }
+    return mem_idx;
+}
+
+struct GPU_Image
+{
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+};
+
+struct GPU_Image_Params
+{
+    VkFormat fmt;
+    s64 width;
+    s64 height;
+    VkImageTiling tiling;
+    VkImageUsageFlags usage;
+    VkMemoryPropertyFlags mem_props;
+};
+
+static GPU_Image create_gpu_image(VkDevice vk_device, VkPhysicalDevice vk_physd, GPU_Image_Params params)
+{
+    VkImageCreateInfo ci = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    ci.imageType     = VK_IMAGE_TYPE_2D;
+    ci.extent.width  = params.width;
+    ci.extent.height = params.height;
+    ci.extent.depth  = 1;
+    ci.mipLevels     = 1;
+    ci.arrayLayers   = 1;
+    ci.format        = params.fmt;
+    ci.tiling        = params.tiling;
+    ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    ci.usage         = params.usage;
+    ci.samples       = VK_SAMPLE_COUNT_1_BIT;
+    ci.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+
+    GPU_Image result;
+    VK_CHECK(vkCreateImage(vk_device, &ci, nullptr, &result.image));
+
+    VkMemoryRequirements mem_requs;
+    vkGetImageMemoryRequirements(vk_device, result.image, &mem_requs);
+
+    VkMemoryAllocateInfo ai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    ai.allocationSize = mem_requs.size;
+    ai.memoryTypeIndex = *find_mem_idx(vk_physd, &mem_requs, params.mem_props);
+
+    VK_CHECK(vkAllocateMemory(vk_device, &ai, nullptr, &result.memory));
+
+    vkBindImageMemory(vk_device, result.image, result.memory, 0);
+    return result;
+}
+
+void destroy_gpu_image(VkDevice vk_device, GPU_Image img)
+{
+    vkFreeMemory(vk_device, img.memory, nullptr);
+    vkDestroyImage(vk_device, img.image, nullptr);
+}
+
+static VkImageView create_image_view(VkDevice vk_device, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags) {
+    VkImageViewCreateInfo vci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .subresourceRange.aspectMask = aspect_flags,
+        .subresourceRange.baseMipLevel = 0,
+        .subresourceRange.levelCount = 1,
+        .subresourceRange.baseArrayLayer = 0,
+        .subresourceRange.layerCount = 1
+    };
+
+    VkImageView result;
+    VK_CHECK(vkCreateImageView(vk_device, &vci, nullptr, &result));
+    return result;
+}
+
+struct Depth_Buffer
+{
+    GPU_Image gpu_img;
+    VkImageView view = VK_NULL_HANDLE;
+    VkFormat fmt = VK_FORMAT_UNDEFINED;
+};
+
+Depth_Buffer create_depth_buffer(VkDevice vk_device, VkPhysicalDevice vk_physd, s32 swawpchain_width, s32 swapchain_height)
+{
+    Depth_Buffer result;
+    VkImageTiling desired_tiling = VK_IMAGE_TILING_OPTIMAL;
+    VkFormat desired_fmts[] = { VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT };
+    for (VkFormat fmt : desired_fmts)
+    {
+        VkFormatProperties props = {};
+        vkGetPhysicalDeviceFormatProperties(vk_physd, fmt, & props);
+        VkFormatFeatureFlags& flags = (desired_tiling == VK_IMAGE_TILING_LINEAR) ? props.linearTilingFeatures : props.optimalTilingFeatures;
+        if (flags & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+        {
+            result.fmt = fmt;
+            break;
+        } 
+    }
+
+    result.gpu_img = create_gpu_image(vk_device, vk_physd, GPU_Image_Params {
+        .fmt = result.fmt,
+        .width = swawpchain_width,
+        .height = swapchain_height,
+        .tiling = desired_tiling,
+        .mem_props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    });
+
+    result.view = create_image_view(vk_device, result.gpu_img.image, result.fmt, VK_IMAGE_ASPECT_DEPTH_BIT);
+    return result;
+}
+
+void destroy_depth_buffer(VkDevice vk_device, Depth_Buffer db)
+{
+    destroy_gpu_image(vk_device, db.gpu_img);
+    vkDestroyImageView(vk_device, db.view, nullptr);
+}
 
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
@@ -514,7 +722,7 @@ int main(int argc, char** argv)
     ctx.tmp_bump = &temporary_lifetime_allocator;
 
     Platform_App platform_app = platform_create_app();
-
+    
     char root_dir[MAX_PATH];
     {
         String dir_string{root_dir, MAX_PATH};
@@ -584,26 +792,21 @@ int main(int argc, char** argv)
     Array<VkImageView> swapchain_image_views = arena_push_array<VkImageView>(ctx.bump, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
-        VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-        create_info.image = swapchain_images[i];
-        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        create_info.format = swapchain_fmt;
-        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        create_info.subresourceRange.levelCount = 1;
-        create_info.subresourceRange.layerCount = 1;
-
-        VK_CHECK(vkCreateImageView(vk_device, &create_info, nullptr, &swapchain_image_views[i]));
+        swapchain_image_views[i] = create_image_view(vk_device, swapchain_images[i], swapchain_fmt, VK_IMAGE_ASPECT_COLOR_BIT);    
     }
 
-    VkRenderPass vk_render_pass = create_vk_fullframe_renderpass(vk_device, swapchain_fmt);
+    Depth_Buffer depth_buffer = create_depth_buffer(vk_device, vk_phys_device, surface_width, surface_height);
+
+    VkRenderPass vk_render_pass = create_vk_fullframe_renderpass(vk_device, swapchain_fmt, depth_buffer.fmt);
 
     Array<VkFramebuffer> swapchain_framebuffers = arena_push_array<VkFramebuffer>(ctx.bump, swapchain_image_count);
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {
+        VkImageView attachments[] = { swapchain_image_views[i], depth_buffer.view };
         VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
         create_info.renderPass = vk_render_pass;
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = &swapchain_image_views[i];
+        create_info.attachmentCount = ARRAYSIZE(attachments);
+        create_info.pAttachments = attachments;
         create_info.width = surface_width;
         create_info.height = surface_height;
         create_info.layers = 1;
@@ -653,57 +856,8 @@ int main(int argc, char** argv)
 
     enum VAttr { Pos = 0, Col = 1, Count };
 
-    // Vector3 const vertices[] = 
-    // {
-    //     Vector3{ 0.0f,  0.5f, 0.0f},
-    //     Vector3{ 0.5f, -0.5f, 0.0f},
-    //     Vector3{-0.5f, -0.5f, 0.0f},
-    // };
-
-    // Vector3 const colors[] = 
-    // {
-    //     Vector3{1.0f, 0.0f, 0.0f},
-    //     Vector3{0.0f, 1.0f, 0.0f},
-    //     Vector3{0.0f, 0.0f, 1.0f},
-    // };
-
-    Vector3 const vertices[] = 
-    {
-        // front
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ -0.5f, 0.5f, -0.5f}, Vector3{0.5f, 0.5f,  -0.5f},
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, 0.5f, -0.5f}, 
-        // back
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ -0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f,  0.5f},
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, 0.5f, 0.5f}, 
-        // top
-        Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
-        Vector3{0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f},
-        // bottom
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, -0.5f},
-        Vector3{0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, 0.5f},
-        // left
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f},
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{-0.5f, 0.5f, -0.5f},
-        // right
-        Vector3{0.5f, -0.5f, -0.5f}, Vector3{0.5f, 0.5f, -0.5f}, Vector3{0.5f, -0.5f, 0.5f},
-        Vector3{0.5f, -0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
-    };
-
-    Vector3 const colors[] = 
-    {
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-    };
+    Vector3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
+    Vector3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
 
     // TODO(): Configure later
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
@@ -797,6 +951,18 @@ int main(int argc, char** argv)
         color_blend_state.pAttachments = &color_attachment_state;
         pipe_create_info.pColorBlendState = &color_blend_state;
 
+        VkPipelineDepthStencilStateCreateInfo depth_stencil {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_LESS,
+            .depthBoundsTestEnable = VK_FALSE,
+            .minDepthBounds = 0.0f,
+            .maxDepthBounds = 1.0f, 
+            .stencilTestEnable = VK_FALSE,
+        };
+        pipe_create_info.pDepthStencilState = &depth_stencil;
+
         VkDynamicState dynamic_states[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
@@ -826,7 +992,6 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Col]));
     }
 
-
     VkDeviceMemory vmems[VAttr::Count] = {};
     {
         auto alloc_buffer_mem = [] (VkDevice vk_device, VkPhysicalDevice vk_phys_device, VkBuffer buffer, VkMemoryPropertyFlags mem_flags) -> VkDeviceMemory 
@@ -834,24 +999,9 @@ int main(int argc, char** argv)
             VkMemoryRequirements mem_requs;
             vkGetBufferMemoryRequirements(vk_device, buffer, &mem_requs);
 
-            VkPhysicalDeviceMemoryProperties mem_props;
-            vkGetPhysicalDeviceMemoryProperties(vk_phys_device, &mem_props);
-    
-            Option<u32> mem_idx;
-            for (u32 i = 0; i < mem_props.memoryTypeCount; ++i)
-            {
-                bool matches_mem_type = mem_requs.memoryTypeBits & (1 << i);
-                bool matches_mem_props = (mem_props.memoryTypes[i].propertyFlags & mem_flags) == mem_flags; 
-                if (matches_mem_type && matches_mem_props)
-                {
-                    option_set(&mem_idx, i);
-                    break;
-                }
-            }
-
             VkMemoryAllocateInfo alloc_info = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
             alloc_info.allocationSize = mem_requs.size;
-            alloc_info.memoryTypeIndex = *mem_idx;
+            alloc_info.memoryTypeIndex = *find_mem_idx(vk_phys_device, &mem_requs, mem_flags);
         
             VkDeviceMemory vk_mem = VK_NULL_HANDLE;
             VK_CHECK(vkAllocateMemory(vk_device, &alloc_info, nullptr, &vk_mem));
@@ -922,8 +1072,6 @@ int main(int argc, char** argv)
         u32 img_idx = 0;
         VkResult get_next_img_result = vkAcquireNextImageKHR(vk_device, vk_swapchain, max_timeout, img_acq_semaphore[frame_idx], VK_NULL_HANDLE, &img_idx);
         VK_CHECK(get_next_img_result);
-        // VkCommandPoolResetFlags pool_reset_flags = 0;
-        // VK_CHECK(vkResetCommandPool(vk_device, vk_cmd_pool, pool_reset_flags));
 
         VkCommandBuffer frame_cmds = vk_cmd_buffers[frame_idx];
         vkResetCommandBuffer(frame_cmds, 0);
@@ -948,16 +1096,24 @@ int main(int argc, char** argv)
             0, 0, 0, 0, 1,
             &render_begin_barrier);
 
-        VkClearColorValue color = {{48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f}};
-        VkClearValue clear_color = {color};
+        VkClearValue clear_colors[] = {
+            VkClearValue {
+                .color = {
+                    48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f
+            }},
+            VkClearValue {
+                .depthStencil = {
+                    .depth = 1.f, .stencil = 0
+            }}
+        };
 
         VkRenderPassBeginInfo pass_begin_info = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         pass_begin_info.renderPass = vk_render_pass;
         pass_begin_info.framebuffer = swapchain_framebuffers[img_idx];
         pass_begin_info.renderArea.extent.width = surface_width;
         pass_begin_info.renderArea.extent.height = surface_height;
-        pass_begin_info.clearValueCount = 1;
-        pass_begin_info.pClearValues = &clear_color;
+        pass_begin_info.clearValueCount = ARRAYSIZE(clear_colors);
+        pass_begin_info.pClearValues = clear_colors;
 
         vkCmdBeginRenderPass(frame_cmds, &pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1090,23 +1246,16 @@ int main(int argc, char** argv)
 
             for (u32 i = 0; i < swapchain_image_count; ++i)
             {
-                VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-                create_info.image = swapchain_images[i];
-                create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                create_info.format = swapchain_fmt;
-                create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                create_info.subresourceRange.levelCount = 1;
-                create_info.subresourceRange.layerCount = 1;
-
-                VK_CHECK(vkCreateImageView(vk_device, &create_info, nullptr, &swapchain_image_views[i]));
+                swapchain_image_views[i] = create_image_view(vk_device, swapchain_images[i], swapchain_fmt, VK_IMAGE_ASPECT_COLOR_BIT);    
             }
 
             for (u32 i = 0; i < swapchain_image_count; ++i)
             {
+                VkImageView attachments[] = { swapchain_image_views[i], depth_buffer.view };
                 VkFramebufferCreateInfo create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
                 create_info.renderPass = vk_render_pass;
-                create_info.attachmentCount = 1;
-                create_info.pAttachments = &swapchain_image_views[i];
+                create_info.attachmentCount = ARRAYSIZE(attachments);
+                create_info.pAttachments = attachments;
                 create_info.width = surface_width;
                 create_info.height = surface_height;
                 create_info.layers = 1;
@@ -1144,6 +1293,8 @@ int main(int argc, char** argv)
         vkFreeMemory(vk_device, vmems[i], nullptr);    
         vkDestroyBuffer(vk_device, vbufs[i], nullptr);
     }
+
+    destroy_depth_buffer(vk_device, depth_buffer);
 
     for (u32 i = 0; i < swapchain_image_count; ++i)
     {

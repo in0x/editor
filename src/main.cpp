@@ -492,10 +492,9 @@ void print_matrix(Matrix4 const& m)
 
 // todo:
 // finish going through vulkan tutorial
-// depth map
-// indexed cube geometry (smooth color interpolation)
-// free cam
 // font rendering
+// free cam
+// indexed cube geometry (smooth color interpolation)
 // window doesnt background
 // VK_KHR_dynamic_rendering
 // model loading
@@ -1099,7 +1098,7 @@ int main(int argc, char** argv)
         VkClearValue clear_colors[] = {
             VkClearValue {
                 .color = {
-                    48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f
+                    { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f }
             }},
             VkClearValue {
                 .depthStencil = {
@@ -1217,11 +1216,12 @@ int main(int argc, char** argv)
         {
             vkDeviceWaitIdle(vk_device);
 
+            destroy_depth_buffer(vk_device, depth_buffer);
+
             for (u32 i = 0; i < swapchain_image_count; ++i)
             {
                 vkDestroyFramebuffer(vk_device, swapchain_framebuffers[i], nullptr);
             }
-
             for (u32 i = 0; i < swapchain_image_count; ++i)
             {
                 vkDestroyImageView(vk_device, swapchain_image_views[i], nullptr);
@@ -1236,6 +1236,7 @@ int main(int argc, char** argv)
 
             LOG("Window size changed: w %u h %u. Recreating the swapchain.", surface_width, surface_height);
 
+            depth_buffer = create_depth_buffer(vk_device, vk_phys_device, surface_width, surface_height);
             vk_swapchain = create_vk_swapchain(vk_device, vk_surface, swapchain_fmt, gfx_family_idx, surface_count, surface_width, surface_height);
 
             u32 new_swapchain_image_count = 0;

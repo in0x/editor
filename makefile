@@ -11,7 +11,7 @@ dep_files = $(obj_files:%.o=%.deps)
 vk_ver = 1.3.236.0
 linker_flags := -g -framework foundation -framework cocoa -framework quartzcore -framework metal -L $$VULKAN_SDK/${vk_ver}/macOS/lib -lshaderc_combined
 
-compile_flags := -std=c++17 -Wall -g
+compile_flags := -std=c++20 -Wall -g
 include_flags := -D VK_USE_PLATFORM_MACOS_MVK \
 -D VK_USE_PLATFORM_METAL_EXT \
 -D _DEBUG \

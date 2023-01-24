@@ -107,7 +107,7 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device, Context ctx)
             return i;
         }
     }
-
+    
     return VK_QUEUE_FAMILY_IGNORED;
 }
 
@@ -497,6 +497,7 @@ void print_matrix(Matrix4 const& m)
 // indexed cube geometry (smooth color interpolation)
 // window doesnt background
 // VK_KHR_dynamic_rendering
+// allocator for vulkan memory
 // model loading
 // deffered render
 // basic lighting
@@ -584,6 +585,46 @@ static Option<u32> find_mem_idx(VkPhysicalDevice vk_physd, VkMemoryRequirements*
         }
     }
     return mem_idx;
+}
+
+struct GPU_Buffer
+{
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkDeviceSize size = 0;
+};
+
+GPU_Buffer create_gpu_buffer(VkDevice vk_device, VkPhysicalDevice vk_physd, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props)
+{
+    VkBufferCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+    };
+
+    GPU_Buffer result;
+    VK_CHECK(vkCreateBuffer(vk_device, &ci, nullptr, &result.buffer));
+
+    VkMemoryRequirements mem_requs;
+    vkGetBufferMemoryRequirements(vk_device, result.buffer, &mem_requs);
+    result.size = mem_requs.size;
+
+    VkMemoryAllocateInfo ai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mem_requs.size,
+        .memoryTypeIndex = *find_mem_idx(vk_physd, &mem_requs, props)
+    };
+    
+    VK_CHECK(vkAllocateMemory(vk_device, &ai, nullptr, &result.memory));
+    vkBindBufferMemory(vk_device, result.buffer, result.memory, 0);
+    return result;
+}
+
+void destroy_gpu_buffer(VkDevice vk_device, GPU_Buffer buffer)
+{
+    vkFreeMemory(vk_device, buffer.memory, nullptr);    
+    vkDestroyBuffer(vk_device, buffer.buffer, nullptr);
 }
 
 struct GPU_Image
@@ -978,52 +1019,6 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateGraphicsPipelines(vk_device, pipeline_cache, 1, &pipe_create_info, nullptr, &triangle_pipeline));
     }
 
-    VkBuffer vbufs[VAttr::Count] = {};
-    {
-        VkBufferCreateInfo create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        create_info.size = sizeof(vertices);
-        create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        create_info.flags = 0;
-    
-        VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Pos]));
-        create_info.size = sizeof(colors);
-        VK_CHECK(vkCreateBuffer(vk_device, &create_info, nullptr, &vbufs[VAttr::Col]));
-    }
-
-    VkDeviceMemory vmems[VAttr::Count] = {};
-    {
-        auto alloc_buffer_mem = [] (VkDevice vk_device, VkPhysicalDevice vk_phys_device, VkBuffer buffer, VkMemoryPropertyFlags mem_flags) -> VkDeviceMemory 
-        {            
-            VkMemoryRequirements mem_requs;
-            vkGetBufferMemoryRequirements(vk_device, buffer, &mem_requs);
-
-            VkMemoryAllocateInfo alloc_info = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-            alloc_info.allocationSize = mem_requs.size;
-            alloc_info.memoryTypeIndex = *find_mem_idx(vk_phys_device, &mem_requs, mem_flags);
-        
-            VkDeviceMemory vk_mem = VK_NULL_HANDLE;
-            VK_CHECK(vkAllocateMemory(vk_device, &alloc_info, nullptr, &vk_mem));
-            return vk_mem;
-        };
-
-        VkMemoryPropertyFlags mem_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        vmems[VAttr::Pos] = alloc_buffer_mem(vk_device, vk_phys_device, vbufs[VAttr::Pos], mem_flags);
-        vmems[VAttr::Col] = alloc_buffer_mem(vk_device, vk_phys_device, vbufs[VAttr::Col], mem_flags);
-        vkBindBufferMemory(vk_device, vbufs[VAttr::Pos], vmems[VAttr::Pos], 0);
-        vkBindBufferMemory(vk_device, vbufs[VAttr::Col], vmems[VAttr::Col], 0);
-    
-        void* pos_mem_dst = nullptr;
-        vkMapMemory(vk_device, vmems[VAttr::Pos], 0, sizeof(vertices), 0, &pos_mem_dst);
-        memcpy(pos_mem_dst, vertices, sizeof(vertices));
-        vkUnmapMemory(vk_device, vmems[VAttr::Pos]);
-
-        void* col_mem_dst = nullptr;
-        vkMapMemory(vk_device, vmems[VAttr::Col], 0, sizeof(colors), 0, &col_mem_dst);
-        memcpy(col_mem_dst, colors, sizeof(colors));
-        vkUnmapMemory(vk_device, vmems[VAttr::Col]);
-    }
-
     VkCommandPool vk_cmd_pool = VK_NULL_HANDLE;
     {
         VkCommandPoolCreateInfo create_info = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -1043,6 +1038,67 @@ int main(int argc, char** argv)
         VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffers[0]));
     }
 
+    GPU_Buffer vbufs[VAttr::Count];
+    {
+        VkCommandBufferAllocateInfo cbai = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandPool = vk_cmd_pool,
+            .commandBufferCount = 1
+        };
+
+        VkCommandBuffer upload_cmds = VK_NULL_HANDLE;
+        VK_CHECK(vkAllocateCommandBuffers(vk_device, &cbai, &upload_cmds));
+
+        u64   buf_sizes[] = { sizeof(vertices), sizeof(colors) };
+        void* buf_ptrs[] = { (void*)vertices, (void*)colors };
+        for (s32 i = 0; i < VAttr::Count; ++i)
+        {    
+            u64 size = buf_sizes[i];
+            void* src = buf_ptrs[i];
+
+            GPU_Buffer staging_buf = create_gpu_buffer(vk_device, vk_phys_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+            void* dst = nullptr;
+            vkMapMemory(vk_device, staging_buf.memory, 0, size, 0, &dst);
+            memcpy(dst, src, buf_sizes[i]);
+            vkUnmapMemory(vk_device, staging_buf.memory);
+
+            GPU_Buffer vert_buf = create_gpu_buffer(vk_device, vk_phys_device, size, 
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+            VkCommandBufferBeginInfo begin_info = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+            };
+            VK_CHECK(vkBeginCommandBuffer(upload_cmds, &begin_info));
+
+            VkBufferCopy copy_region = {
+                .srcOffset = 0,
+                .dstOffset = 0,
+                .size = size
+            };
+            vkCmdCopyBuffer(upload_cmds, staging_buf.buffer, vert_buf.buffer, 1, &copy_region);
+            vkEndCommandBuffer(upload_cmds);
+
+            VkSubmitInfo sbi = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &upload_cmds
+            };
+
+            vkQueueSubmit(vk_queue, 1, &sbi, VK_NULL_HANDLE);
+            vkQueueWaitIdle(vk_queue);
+
+            destroy_gpu_buffer(vk_device, staging_buf);
+
+            vbufs[i] = vert_buf;
+        }
+
+        vkFreeCommandBuffers(vk_device, vk_cmd_pool, 1, &upload_cmds);
+    }
+    
     Timer frame_timer = make_timer();
     s64 frame_count = 0;
     Vector3 camera_pos = {};
@@ -1137,7 +1193,8 @@ int main(int argc, char** argv)
         vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
         
         VkDeviceSize buf_offsets[VAttr::Count] = {0, 0};
-        vkCmdBindVertexBuffers(frame_cmds, 0, 2, vbufs,buf_offsets);
+        VkBuffer vert_bufs[] = { vbufs[VAttr::Pos].buffer, vbufs[VAttr::Col].buffer };
+        vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
 
         s_since_step += dt_s;
         Vector3 prev_camera_pos = camera_pos;
@@ -1291,8 +1348,7 @@ int main(int argc, char** argv)
     vkDestroyCommandPool(vk_device, vk_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
     for (s32 i = 0; i < VAttr::Count; ++i)
     {
-        vkFreeMemory(vk_device, vmems[i], nullptr);    
-        vkDestroyBuffer(vk_device, vbufs[i], nullptr);
+        destroy_gpu_buffer(vk_device, vbufs[i]);
     }
 
     destroy_depth_buffer(vk_device, depth_buffer);

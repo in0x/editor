@@ -55,6 +55,31 @@ struct Array
     {
         return array && size;
     }
+
+    operator bool() const { return is_valid(); }
+};
+
+template <typename T, s64 len>
+struct FixedArray : public Array<T>
+{
+    FixedArray()
+    {
+        this->array = buffer;
+        this->size = len;
+    }
+
+    template<s64 src_count>
+    FixedArray(const T (&src)[src_count])
+        : FixedArray()
+    {
+        this->count = src_count;
+        static_assert(src_count <= len);
+        for (s64 i = 0; i < src_count; ++i) {
+            buffer[i] = src[i];
+        }
+    }
+
+    T buffer[len];
 };
 
 template <typename T>

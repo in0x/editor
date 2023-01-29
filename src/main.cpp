@@ -90,7 +90,7 @@ static VkBool32 VKAPI_CALL debug_message_callback(VkDebugUtilsMessageSeverityFla
     return VK_FALSE; // Users should always return false according to spec.
 }
 
-u32 get_gfx_family_index(VkPhysicalDevice phys_device, Context ctx)
+u32 get_queue_family_index(VkPhysicalDevice phys_device, Context ctx, u32 queue_flags)
 {
     ARENA_DEFER_CLEAR(ctx.tmp_bump);
 
@@ -102,7 +102,7 @@ u32 get_gfx_family_index(VkPhysicalDevice phys_device, Context ctx)
 
     for (u32 i = 0; i < queue_count; ++i)
     {
-        if (queue_props[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+        if (queue_props[i].queueFlags & queue_flags)
         {
             return i;
         }
@@ -204,7 +204,7 @@ static VkPhysicalDevice create_vk_physical_device(VkInstance vk_instance, VkSurf
 
         LOG("Enumerating GPU %s", props.deviceName);
 
-        u32 gfx_family_idx = get_gfx_family_index(phys_devices[i], ctx);
+        u32 gfx_family_idx = get_queue_family_index(phys_devices[i], ctx, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
         if (gfx_family_idx == VK_QUEUE_FAMILY_IGNORED)
         {
             continue;
@@ -594,13 +594,23 @@ struct GPU_Buffer
     VkDeviceSize size = 0;
 };
 
-GPU_Buffer create_gpu_buffer(VkDevice vk_device, VkPhysicalDevice vk_physd, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props)
+struct GPU_Buffer_Params
+{
+    Array<u32> queue_families;
+    VkDeviceSize size           = 0;
+    VkBufferUsageFlags usage    = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+    VkMemoryPropertyFlags props = VK_MEMORY_PROPERTY_FLAG_BITS_MAX_ENUM;
+};
+
+GPU_Buffer create_gpu_buffer(VkDevice vk_device, VkPhysicalDevice vk_physd, GPU_Buffer_Params params)
 {
     VkBufferCreateInfo ci = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = size,
-        .usage = usage,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+        .sType                 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size                  = params.size,
+        .usage                 = params.usage,
+        .sharingMode           = params.queue_families ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = params.queue_families ? (u32)params.queue_families.count : 1u,
+        .pQueueFamilyIndices   = params.queue_families ? params.queue_families.array : nullptr,
     };
 
     GPU_Buffer result;
@@ -613,7 +623,7 @@ GPU_Buffer create_gpu_buffer(VkDevice vk_device, VkPhysicalDevice vk_physd, VkDe
     VkMemoryAllocateInfo ai = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = mem_requs.size,
-        .memoryTypeIndex = *find_mem_idx(vk_physd, &mem_requs, props)
+        .memoryTypeIndex = *find_mem_idx(vk_physd, &mem_requs, params.props)
     };
     
     VK_CHECK(vkAllocateMemory(vk_device, &ai, nullptr, &result.memory));
@@ -635,29 +645,34 @@ struct GPU_Image
 
 struct GPU_Image_Params
 {
-    VkFormat fmt;
-    s64 width;
-    s64 height;
-    VkImageTiling tiling;
-    VkImageUsageFlags usage;
-    VkMemoryPropertyFlags mem_props;
+    Array<u32> queue_families;
+    VkFormat fmt                    = VK_FORMAT_UNDEFINED;
+    s64 width                       = 0;
+    s64 height                      = 0;
+    VkImageTiling tiling            = VK_IMAGE_TILING_MAX_ENUM;
+    VkImageUsageFlags usage         = VK_IMAGE_USAGE_FLAG_BITS_MAX_ENUM;
+    VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_FLAG_BITS_MAX_ENUM;
 };
 
 static GPU_Image create_gpu_image(VkDevice vk_device, VkPhysicalDevice vk_physd, GPU_Image_Params params)
 {
-    VkImageCreateInfo ci = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-    ci.imageType     = VK_IMAGE_TYPE_2D;
-    ci.extent.width  = params.width;
-    ci.extent.height = params.height;
-    ci.extent.depth  = 1;
-    ci.mipLevels     = 1;
-    ci.arrayLayers   = 1;
-    ci.format        = params.fmt;
-    ci.tiling        = params.tiling;
-    ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    ci.usage         = params.usage;
-    ci.samples       = VK_SAMPLE_COUNT_1_BIT;
-    ci.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+    VkImageCreateInfo ci = {
+        .sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType             = VK_IMAGE_TYPE_2D,
+        .extent.width          = (u32)params.width,
+        .extent.height         = (u32)params.height,
+        .extent.depth          = 1,
+        .mipLevels             = 1,
+        .arrayLayers           = 1,
+        .format                = params.fmt,
+        .tiling                = params.tiling,
+        .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED,
+        .usage                 = params.usage,
+        .samples               = VK_SAMPLE_COUNT_1_BIT,
+        .sharingMode           = params.queue_families ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = params.queue_families ? (u32)params.queue_families.count : 1u,
+        .pQueueFamilyIndices   = params.queue_families ? params.queue_families.array : nullptr,
+    };
 
     GPU_Image result;
     VK_CHECK(vkCreateImage(vk_device, &ci, nullptr, &result.image));
@@ -803,14 +818,14 @@ int main(int argc, char** argv)
     Array<char const*> phys_device_ext_slice{&phys_device_exts, 1};
     VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, ctx);
 
-    u32 const gfx_family_idx = get_gfx_family_index(vk_phys_device, ctx);
+    u32 const gfx_family_idx = get_queue_family_index(vk_phys_device, ctx, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
     ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);
 
     VkDevice vk_device = create_vk_device(vk_instance, vk_phys_device, gfx_family_idx);
     volkLoadDevice(vk_device);
 
-    VkQueue vk_queue = VK_NULL_HANDLE;
-    vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &vk_queue);
+    VkQueue gfx_queue = VK_NULL_HANDLE;
+    vkGetDeviceQueue(vk_device, gfx_family_idx, 0, &gfx_queue);
 
     VkFormat swapchain_fmt = get_swapchain_fmt(vk_phys_device, vk_surface, ctx);
 
@@ -1019,22 +1034,20 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreateGraphicsPipelines(vk_device, pipeline_cache, 1, &pipe_create_info, nullptr, &triangle_pipeline));
     }
 
-    VkCommandPool vk_cmd_pool = VK_NULL_HANDLE;
+    VkCommandPool gfx_cmd_pool = VK_NULL_HANDLE;
     {
         VkCommandPoolCreateInfo create_info = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         create_info.queueFamilyIndex = gfx_family_idx;
-
-        VK_CHECK(vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_cmd_pool));
+        VK_CHECK(vkCreateCommandPool(vk_device, &create_info, nullptr, &gfx_cmd_pool));
     }
 
     VkCommandBuffer vk_cmd_buffers[MAX_FRAMES_IN_FLIGHT] = {};
     {
         VkCommandBufferAllocateInfo allocate_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        allocate_info.commandPool = vk_cmd_pool;
+        allocate_info.commandPool = gfx_cmd_pool;
         allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocate_info.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
-
         VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffers[0]));
     }
 
@@ -1043,7 +1056,7 @@ int main(int argc, char** argv)
         VkCommandBufferAllocateInfo cbai = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandPool = vk_cmd_pool,
+            .commandPool = gfx_cmd_pool,
             .commandBufferCount = 1
         };
 
@@ -1057,16 +1070,22 @@ int main(int argc, char** argv)
             u64 size = buf_sizes[i];
             void* src = buf_ptrs[i];
 
-            GPU_Buffer staging_buf = create_gpu_buffer(vk_device, vk_phys_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            GPU_Buffer staging_buf = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+                .size  = size,
+                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .props =  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            });
 
             void* dst = nullptr;
             vkMapMemory(vk_device, staging_buf.memory, 0, size, 0, &dst);
             memcpy(dst, src, buf_sizes[i]);
             vkUnmapMemory(vk_device, staging_buf.memory);
 
-            GPU_Buffer vert_buf = create_gpu_buffer(vk_device, vk_phys_device, size, 
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            GPU_Buffer vert_buf = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+                .size = size, 
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+                .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            });
 
             VkCommandBufferBeginInfo begin_info = {
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -1088,15 +1107,15 @@ int main(int argc, char** argv)
                 .pCommandBuffers = &upload_cmds
             };
 
-            vkQueueSubmit(vk_queue, 1, &sbi, VK_NULL_HANDLE);
-            vkQueueWaitIdle(vk_queue);
+            vkQueueSubmit(gfx_queue, 1, &sbi, VK_NULL_HANDLE);
+            vkQueueWaitIdle(gfx_queue);
 
             destroy_gpu_buffer(vk_device, staging_buf);
 
             vbufs[i] = vert_buf;
         }
 
-        vkFreeCommandBuffers(vk_device, vk_cmd_pool, 1, &upload_cmds);
+        vkFreeCommandBuffers(vk_device, gfx_cmd_pool, 1, &upload_cmds);
     }
     
     Timer frame_timer = make_timer();
@@ -1256,7 +1275,7 @@ int main(int argc, char** argv)
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &img_rel_semaphore[frame_idx];
 
-        vkQueueSubmit(vk_queue, 1, &submit_info, end_of_frame_fences[frame_idx]);
+        vkQueueSubmit(gfx_queue, 1, &submit_info, end_of_frame_fences[frame_idx]);
 
         VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
         present_info.waitSemaphoreCount = 1;
@@ -1265,7 +1284,7 @@ int main(int argc, char** argv)
         present_info.pSwapchains = &vk_swapchain;
         present_info.pImageIndices = &img_idx;
 
-        VK_CHECK(vkQueuePresentKHR(vk_queue, &present_info));
+        VK_CHECK(vkQueuePresentKHR(gfx_queue, &present_info));
 
         if (platform_did_window_size_change(main_window_handle) ||
             get_next_img_result == VK_ERROR_OUT_OF_DATE_KHR     ||
@@ -1345,7 +1364,7 @@ int main(int argc, char** argv)
         vkDestroySemaphore(vk_device, img_rel_semaphore[i], nullptr);
 
     vkDestroyRenderPass(vk_device, vk_render_pass, nullptr);
-    vkDestroyCommandPool(vk_device, vk_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
+    vkDestroyCommandPool(vk_device, gfx_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
     for (s32 i = 0; i < VAttr::Count; ++i)
     {
         destroy_gpu_buffer(vk_device, vbufs[i]);

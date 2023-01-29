@@ -493,6 +493,7 @@ void print_matrix(Matrix4 const& m)
 // todo:
 // finish going through vulkan tutorial
 // font rendering
+// wait on uploads asynchronously
 // free cam
 // indexed cube geometry (smooth color interpolation)
 // window doesnt background
@@ -757,6 +758,91 @@ void destroy_depth_buffer(VkDevice vk_device, Depth_Buffer db)
     vkDestroyImageView(vk_device, db.view, nullptr);
 }
 
+struct Upload_Context
+{
+    VkCommandPool cmd_pool = VK_NULL_HANDLE;
+    VkCommandBuffer cmd_buffer = VK_NULL_HANDLE;
+};
+
+struct Buffer_Upload
+{
+    GPU_Buffer staging_buffer;
+    GPU_Buffer render_buffer;
+    VkEvent upload_finished = VK_NULL_HANDLE;
+};
+
+static Upload_Context create_upload_context(VkDevice vk_device, u32 gfx_family_idx)
+{
+    Upload_Context result;
+
+    VkCommandPoolCreateInfo cpai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = gfx_family_idx,
+    };
+    VK_CHECK(vkCreateCommandPool(vk_device, &cpai, nullptr, &result.cmd_pool));
+
+    VkCommandBufferAllocateInfo cbai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandPool = result.cmd_pool,
+        .commandBufferCount = 1
+    };
+
+    VK_CHECK(vkAllocateCommandBuffers(vk_device, &cbai, &result.cmd_buffer));
+
+    return result;
+};
+
+static void destroy_upload_context(VkDevice vk_device, Upload_Context ctx)
+{
+    vkDestroyCommandPool(vk_device, ctx.cmd_pool, nullptr);    
+}
+
+static Buffer_Upload record_buffer_upload(VkDevice vk_device, VkPhysicalDevice vk_phys_device, Upload_Context upload_ctx, void* src, u64 cnt)
+{
+    Buffer_Upload result;
+    
+    result.staging_buffer = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+        .size  = cnt,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .props =  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    });
+
+    void* dst = nullptr;
+    vkMapMemory(vk_device, result.staging_buffer.memory, 0, cnt, 0, &dst);
+    memcpy(dst, src, cnt);
+    vkUnmapMemory(vk_device, result.staging_buffer.memory);
+
+    result.render_buffer = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+        .size = cnt, 
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+        .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    });
+
+    VkBufferCopy copy_region = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = cnt
+    };
+    vkCmdCopyBuffer(upload_ctx.cmd_buffer, result.staging_buffer.buffer, result.render_buffer.buffer, 1, &copy_region);
+    
+    VkEventCreateInfo eci {VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
+    vkCreateEvent(vk_device, &eci, nullptr, &result.upload_finished);
+    vkCmdSetEvent(upload_ctx.cmd_buffer, result.upload_finished, VK_PIPELINE_STAGE_NONE_KHR);
+    return result;
+}
+
+static void release_upload_buffer(VkDevice vk_device, Buffer_Upload* buffer)
+{
+    ASSERT_MSG(vkGetEventStatus(vk_device, buffer->upload_finished) == VK_EVENT_SET,
+        "Tried to release upload staging buffer before the upload has finished");
+
+    vkDestroyEvent(vk_device, buffer->upload_finished, nullptr);
+    destroy_gpu_buffer(vk_device, buffer->staging_buffer);
+    buffer->render_buffer = {};
+}
+
 #if PLATFORM_WIN32
 INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 #else
@@ -909,11 +995,6 @@ int main(int argc, char** argv)
     strcat(shader_path, "src/shaders/triangle.frag.glsl");
     VkShaderModule frag_shader = compile_shader(vk_device, Shader_Stage::fragment, String{shader_path, MAX_PATH}, &ctx);
 
-    enum VAttr { Pos = 0, Col = 1, Count };
-
-    Vector3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
-    Vector3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
-
     // TODO(): Configure later
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 
@@ -931,6 +1012,11 @@ int main(int argc, char** argv)
 
         VK_CHECK(vkCreatePipelineLayout(vk_device, &create_info, nullptr, &triangle_layout));
     }
+
+    enum VAttr { Pos = 0, Col = 1, Count };
+
+    Vector3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
+    Vector3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
 
     VkPipeline triangle_pipeline = VK_NULL_HANDLE;
     {
@@ -1051,71 +1137,38 @@ int main(int argc, char** argv)
         VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffers[0]));
     }
 
+    Upload_Context upload_ctx = create_upload_context(vk_device, gfx_family_idx);
+
     GPU_Buffer vbufs[VAttr::Count];
     {
-        VkCommandBufferAllocateInfo cbai = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandPool = gfx_cmd_pool,
-            .commandBufferCount = 1
-        };
-
-        VkCommandBuffer upload_cmds = VK_NULL_HANDLE;
-        VK_CHECK(vkAllocateCommandBuffers(vk_device, &cbai, &upload_cmds));
-
-        u64   buf_sizes[] = { sizeof(vertices), sizeof(colors) };
-        void* buf_ptrs[] = { (void*)vertices, (void*)colors };
-        for (s32 i = 0; i < VAttr::Count; ++i)
-        {    
-            u64 size = buf_sizes[i];
-            void* src = buf_ptrs[i];
-
-            GPU_Buffer staging_buf = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-                .size  = size,
-                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                .props =  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            });
-
-            void* dst = nullptr;
-            vkMapMemory(vk_device, staging_buf.memory, 0, size, 0, &dst);
-            memcpy(dst, src, buf_sizes[i]);
-            vkUnmapMemory(vk_device, staging_buf.memory);
-
-            GPU_Buffer vert_buf = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-                .size = size, 
-                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-                .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            });
-
-            VkCommandBufferBeginInfo begin_info = {
+        VkCommandBufferBeginInfo begin_info = {
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                 .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
             };
-            VK_CHECK(vkBeginCommandBuffer(upload_cmds, &begin_info));
+        VK_CHECK(vkBeginCommandBuffer(upload_ctx.cmd_buffer, &begin_info));
+            
+        Buffer_Upload vert_upload = record_buffer_upload(vk_device, vk_phys_device, 
+            upload_ctx, (void*)&vertices, sizeof(vertices));
 
-            VkBufferCopy copy_region = {
-                .srcOffset = 0,
-                .dstOffset = 0,
-                .size = size
-            };
-            vkCmdCopyBuffer(upload_cmds, staging_buf.buffer, vert_buf.buffer, 1, &copy_region);
-            vkEndCommandBuffer(upload_cmds);
+        Buffer_Upload col_upload = record_buffer_upload(vk_device, vk_phys_device, 
+            upload_ctx, (void*)&colors, sizeof(colors));
 
-            VkSubmitInfo sbi = {
-                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                .commandBufferCount = 1,
-                .pCommandBuffers = &upload_cmds
-            };
+        vkEndCommandBuffer(upload_ctx.cmd_buffer);
 
-            vkQueueSubmit(gfx_queue, 1, &sbi, VK_NULL_HANDLE);
-            vkQueueWaitIdle(gfx_queue);
+        VkSubmitInfo sbi = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &upload_ctx.cmd_buffer
+        };
 
-            destroy_gpu_buffer(vk_device, staging_buf);
+        vkQueueSubmit(gfx_queue, 1, &sbi, VK_NULL_HANDLE);
+        vkQueueWaitIdle(gfx_queue);
 
-            vbufs[i] = vert_buf;
-        }
+        vbufs[VAttr::Pos] = vert_upload.render_buffer;
+        vbufs[VAttr::Col] = col_upload.render_buffer;
 
-        vkFreeCommandBuffers(vk_device, gfx_cmd_pool, 1, &upload_cmds);
+        release_upload_buffer(vk_device, &vert_upload);
+        release_upload_buffer(vk_device, &col_upload);
     }
     
     Timer frame_timer = make_timer();
@@ -1369,6 +1422,8 @@ int main(int argc, char** argv)
     {
         destroy_gpu_buffer(vk_device, vbufs[i]);
     }
+
+    destroy_upload_context(vk_device, upload_ctx);
 
     destroy_depth_buffer(vk_device, depth_buffer);
 

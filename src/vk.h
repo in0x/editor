@@ -6,7 +6,7 @@
 
 #include "3p/volk/volk.h"
 
-constexpr u32 C_TARGET_VK_VERSION = VK_API_VERSION_1_2;
+constexpr u32 C_TARGET_VK_VERSION = VK_API_VERSION_1_3;
 
 #define VK_CHECK(op)                                                                                    \
     do                                                                                                  \

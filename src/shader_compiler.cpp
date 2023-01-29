@@ -191,6 +191,8 @@ glslang_target_client_version_t map_version(u32 val)
     {
     case VK_API_VERSION_1_2:
         return GLSLANG_TARGET_VULKAN_1_2;
+    case VK_API_VERSION_1_3:
+        return GLSLANG_TARGET_VULKAN_1_3;
     default:
     {
         ASSERT_FAILED_MSG("Attempted to map from unknown vulkan version");

@@ -493,17 +493,17 @@ void print_matrix(Matrix4 const& m)
 // todo:
 // finish going through vulkan tutorial
 // font rendering
-// wait on uploads asynchronously
 // free cam
-// indexed cube geometry (smooth color interpolation)
 // window doesnt background
 // VK_KHR_dynamic_rendering
+// wait on uploads asynchronously
 // allocator for vulkan memory
 // model loading
 // deffered render
 // basic lighting
 //  pbr
 //  point / spot / directional
+// HBAO
 // natvis for Array<T>
 // gpu text rendering
 // imgui or custom ui
@@ -511,62 +511,36 @@ void print_matrix(Matrix4 const& m)
 // animation
 // sound
 
-struct Tri_Geo
-{
-    constexpr static Vector3 vertices[] = 
-    {
-        Vector3{ 0.0f,  0.5f, 0.0f},
-        Vector3{ 0.5f, -0.5f, 0.0f},
-        Vector3{-0.5f, -0.5f, 0.0f},
-    };
-
-    constexpr static Vector3 colors[] = 
-    {
-        Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 0.0f, 1.0f},
-    };
-};
-
 struct Cube_Geo
 {
+    //   5    6
+    // 1    2
+    //   4    7
+    // 0    3
+    // Vertex order when viewed head on: BL, TL, TR, BR
     constexpr static Vector3 vertices[] = 
-    {
-        // front
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ -0.5f, 0.5f, -0.5f}, Vector3{0.5f, 0.5f,  -0.5f},
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, -0.5f, -0.5f}, Vector3{ 0.5f, 0.5f, -0.5f}, 
-        // back
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ -0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f,  0.5f},
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, -0.5f, 0.5f}, Vector3{ 0.5f, 0.5f, 0.5f}, 
-        // top
-        Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
-        Vector3{0.5f, 0.5f, -0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f},
-        // bottom
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, -0.5f},
-        Vector3{0.5f, -0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f}, Vector3{0.5f, -0.5f, 0.5f},
-        // left
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, 0.5f, -0.5f}, Vector3{-0.5f, -0.5f, 0.5f},
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{-0.5f, 0.5f, -0.5f},
-        // right
-        Vector3{0.5f, -0.5f, -0.5f}, Vector3{0.5f, 0.5f, -0.5f}, Vector3{0.5f, -0.5f, 0.5f},
-        Vector3{0.5f, -0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, -0.5f},
+    { 
+        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, 0.5f, -0.5f}, Vector3{0.5f, 0.5f, -0.5f}, Vector3{0.5f, -0.5f, -0.5f},
+        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.5f, -0.5f, 0.5f},
     };
 
+    constexpr u16 static indices[] =
+    {
+        0, 1, 3, 3, 1, 2,
+        4, 5, 7, 7, 5, 6,
+        1, 5, 2, 2, 5, 6,
+        0, 4, 3, 3, 4, 7,
+        0, 1, 4, 4, 1, 5,
+        3, 2, 7, 7, 2, 6
+    };
+
+    // RGB Cube
+    // https://www.pngitem.com/pimgs/m/592-5920896_rgb-color-model-cube-hd-png-download.png
     constexpr Vector3 static colors[] = 
     {
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-        Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 0.0f, 1.0f},
-    };
+        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 1.0f}, Vector3{1.0f, 1.0f, 1.0f}, Vector3{1.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 1.0f, 1.0f}, Vector3{0.0f, 1.0f, 0.0f},
+    };    
 };
 
 static Option<u32> find_mem_idx(VkPhysicalDevice vk_physd, VkMemoryRequirements* requs, VkMemoryPropertyFlags flags)
@@ -767,7 +741,6 @@ struct Upload_Context
 struct Buffer_Upload
 {
     GPU_Buffer staging_buffer;
-    GPU_Buffer render_buffer;
     VkEvent upload_finished = VK_NULL_HANDLE;
 };
 
@@ -799,10 +772,10 @@ static void destroy_upload_context(VkDevice vk_device, Upload_Context ctx)
     vkDestroyCommandPool(vk_device, ctx.cmd_pool, nullptr);    
 }
 
-static Buffer_Upload record_buffer_upload(VkDevice vk_device, VkPhysicalDevice vk_phys_device, Upload_Context upload_ctx, void* src, u64 cnt)
+static Buffer_Upload upload_to_buffer(VkDevice vk_device, VkPhysicalDevice vk_phys_device, 
+    Upload_Context upload_ctx, GPU_Buffer dst_buffer, void* src, u64 cnt)
 {
     Buffer_Upload result;
-    
     result.staging_buffer = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
         .size  = cnt,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -814,18 +787,12 @@ static Buffer_Upload record_buffer_upload(VkDevice vk_device, VkPhysicalDevice v
     memcpy(dst, src, cnt);
     vkUnmapMemory(vk_device, result.staging_buffer.memory);
 
-    result.render_buffer = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-        .size = cnt, 
-        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-        .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    });
-
     VkBufferCopy copy_region = {
         .srcOffset = 0,
         .dstOffset = 0,
         .size = cnt
     };
-    vkCmdCopyBuffer(upload_ctx.cmd_buffer, result.staging_buffer.buffer, result.render_buffer.buffer, 1, &copy_region);
+    vkCmdCopyBuffer(upload_ctx.cmd_buffer, result.staging_buffer.buffer, dst_buffer.buffer, 1, &copy_region);
     
     VkEventCreateInfo eci {VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
     vkCreateEvent(vk_device, &eci, nullptr, &result.upload_finished);
@@ -840,7 +807,6 @@ static void release_upload_buffer(VkDevice vk_device, Buffer_Upload* buffer)
 
     vkDestroyEvent(vk_device, buffer->upload_finished, nullptr);
     destroy_gpu_buffer(vk_device, buffer->staging_buffer);
-    buffer->render_buffer = {};
 }
 
 #if PLATFORM_WIN32
@@ -1013,32 +979,30 @@ int main(int argc, char** argv)
         VK_CHECK(vkCreatePipelineLayout(vk_device, &create_info, nullptr, &triangle_layout));
     }
 
-    enum VAttr { Pos = 0, Col = 1, Count };
-
+    enum Buffer_T { Pos = 0, Col, Idx, Count, Vert_T_Cnt = 2 };
     Vector3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
     Vector3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
-
+    u16 const (&indices) [ARRAYSIZE(Cube_Geo::indices)] = Cube_Geo::indices;
     VkPipeline triangle_pipeline = VK_NULL_HANDLE;
     {
-
         // TODO(): Automate with shader reflection
-        VkVertexInputBindingDescription vert_binds[VAttr::Count];
-        vert_binds[VAttr::Pos].binding = VAttr::Pos;
-        vert_binds[VAttr::Col].binding = VAttr::Col;
-        vert_binds[VAttr::Col].stride = sizeof(Vector3);
-        vert_binds[VAttr::Pos].stride = sizeof(Vector3);
-        vert_binds[VAttr::Pos].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        vert_binds[VAttr::Col].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        VkVertexInputBindingDescription vert_binds[Buffer_T::Vert_T_Cnt];
+        vert_binds[Buffer_T::Pos].binding = Buffer_T::Pos;
+        vert_binds[Buffer_T::Col].binding = Buffer_T::Col;
+        vert_binds[Buffer_T::Col].stride = sizeof(Vector3);
+        vert_binds[Buffer_T::Pos].stride = sizeof(Vector3);
+        vert_binds[Buffer_T::Pos].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        vert_binds[Buffer_T::Col].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        VkVertexInputAttributeDescription vert_attrs[VAttr::Count];
-        vert_attrs[VAttr::Pos].binding = VAttr::Pos;
-        vert_attrs[VAttr::Col].binding = VAttr::Col;
-        vert_attrs[VAttr::Pos].location = VAttr::Pos;
-        vert_attrs[VAttr::Col].location = VAttr::Col;
-        vert_attrs[VAttr::Pos].format = VK_FORMAT_R32G32B32_SFLOAT;
-        vert_attrs[VAttr::Col].format = VK_FORMAT_R32G32B32_SFLOAT;
-        vert_attrs[VAttr::Pos].offset = 0;
-        vert_attrs[VAttr::Col].offset = 0;
+        VkVertexInputAttributeDescription vert_attrs[Buffer_T::Vert_T_Cnt];
+        vert_attrs[Buffer_T::Pos].binding = Buffer_T::Pos;
+        vert_attrs[Buffer_T::Col].binding = Buffer_T::Col;
+        vert_attrs[Buffer_T::Pos].location = Buffer_T::Pos;
+        vert_attrs[Buffer_T::Col].location = Buffer_T::Col;
+        vert_attrs[Buffer_T::Pos].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vert_attrs[Buffer_T::Col].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vert_attrs[Buffer_T::Pos].offset = 0;
+        vert_attrs[Buffer_T::Col].offset = 0;
 
         VkGraphicsPipelineCreateInfo pipe_create_info = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
 
@@ -1055,8 +1019,8 @@ int main(int argc, char** argv)
         pipe_create_info.pStages = shader_stages;
 
         VkPipelineVertexInputStateCreateInfo vertex_input = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-        vertex_input.vertexBindingDescriptionCount = VAttr::Count;
-        vertex_input.vertexAttributeDescriptionCount = VAttr::Count;
+        vertex_input.vertexBindingDescriptionCount = Buffer_T::Vert_T_Cnt;
+        vertex_input.vertexAttributeDescriptionCount = Buffer_T::Vert_T_Cnt;
         vertex_input.pVertexBindingDescriptions = vert_binds;
         vertex_input.pVertexAttributeDescriptions = vert_attrs;
         pipe_create_info.pVertexInputState = &vertex_input;
@@ -1139,19 +1103,40 @@ int main(int argc, char** argv)
 
     Upload_Context upload_ctx = create_upload_context(vk_device, gfx_family_idx);
 
-    GPU_Buffer vbufs[VAttr::Count];
+    GPU_Buffer vbufs[Buffer_T::Count];
     {
         VkCommandBufferBeginInfo begin_info = {
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-            };
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+        };
         VK_CHECK(vkBeginCommandBuffer(upload_ctx.cmd_buffer, &begin_info));
             
-        Buffer_Upload vert_upload = record_buffer_upload(vk_device, vk_phys_device, 
-            upload_ctx, (void*)&vertices, sizeof(vertices));
+        vbufs[Buffer_T::Pos] = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+            .size = sizeof(vertices), 
+            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+            .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        });
 
-        Buffer_Upload col_upload = record_buffer_upload(vk_device, vk_phys_device, 
-            upload_ctx, (void*)&colors, sizeof(colors));
+        vbufs[Buffer_T::Col] = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+            .size = sizeof(vertices), 
+            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+            .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        });
+
+        vbufs[Buffer_T::Idx] = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
+            .size = sizeof(indices),
+            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        });
+
+        Buffer_Upload vert_upload = upload_to_buffer(vk_device, vk_phys_device, 
+            upload_ctx, vbufs[Buffer_T::Pos], (void*)&vertices, sizeof(vertices));
+
+        Buffer_Upload col_upload = upload_to_buffer(vk_device, vk_phys_device, 
+            upload_ctx, vbufs[Buffer_T::Col], (void*)&colors, sizeof(colors));
+
+        Buffer_Upload idx_upload = upload_to_buffer(vk_device, vk_phys_device,
+            upload_ctx, vbufs[Buffer_T::Idx], (void*)&indices, sizeof(indices));
 
         vkEndCommandBuffer(upload_ctx.cmd_buffer);
 
@@ -1164,11 +1149,9 @@ int main(int argc, char** argv)
         vkQueueSubmit(gfx_queue, 1, &sbi, VK_NULL_HANDLE);
         vkQueueWaitIdle(gfx_queue);
 
-        vbufs[VAttr::Pos] = vert_upload.render_buffer;
-        vbufs[VAttr::Col] = col_upload.render_buffer;
-
         release_upload_buffer(vk_device, &vert_upload);
         release_upload_buffer(vk_device, &col_upload);
+        release_upload_buffer(vk_device, &idx_upload);
     }
     
     Timer frame_timer = make_timer();
@@ -1226,7 +1209,8 @@ int main(int argc, char** argv)
         VkClearValue clear_colors[] = {
             VkClearValue {
                 .color = {
-                    { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f }
+                    {0.f, 0.f, 0.f, 1.0f}
+                    // { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f }
             }},
             VkClearValue {
                 .depthStencil = {
@@ -1264,9 +1248,10 @@ int main(int argc, char** argv)
 
         vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
         
-        VkDeviceSize buf_offsets[VAttr::Count] = {0, 0};
-        VkBuffer vert_bufs[] = { vbufs[VAttr::Pos].buffer, vbufs[VAttr::Col].buffer };
+        VkDeviceSize buf_offsets[] = {0, 0};
+        VkBuffer vert_bufs[] = { vbufs[Buffer_T::Pos].buffer, vbufs[Buffer_T::Col].buffer };
         vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
+        vkCmdBindIndexBuffer(frame_cmds, vbufs[Buffer_T::Idx].buffer, 0, VK_INDEX_TYPE_UINT16);
 
         s_since_step += dt_s;
         Vector3 prev_camera_pos = camera_pos;
@@ -1276,10 +1261,10 @@ int main(int argc, char** argv)
 
             f32 drag = 0.95f;
             f32 accel = 0.0001f * step_len_s;
-            if (input_state->key_down[Input_Key_Code::A]) camera_vel.x += accel;
-            if (input_state->key_down[Input_Key_Code::D]) camera_vel.x -= accel;
-            if (input_state->key_down[Input_Key_Code::S]) camera_vel.y += accel;
-            if (input_state->key_down[Input_Key_Code::W]) camera_vel.y -= accel;
+            if (input_state->key_down[Input_Key_Code::A]) camera_vel.x -= accel;
+            if (input_state->key_down[Input_Key_Code::D]) camera_vel.x += accel;
+            if (input_state->key_down[Input_Key_Code::S]) camera_vel.y -= accel;
+            if (input_state->key_down[Input_Key_Code::W]) camera_vel.y += accel;
 
             camera_vel *= drag;
             camera_vel = clamp(camera_vel, -0.0001f, 0.0001f);
@@ -1289,14 +1274,14 @@ int main(int argc, char** argv)
         }
         camera_pos = lerp(camera_pos, prev_camera_pos, s_since_step / step_len_s);
         
-        Matrix4 view = matrix4_translate(vec3_add(camera_pos, Vector3{0.f, 0.f, -2.0f}));
-        Matrix4 projection = matrix4_perspective_RH(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
+        Matrix4 view = matrix4_look_at(vec3_add(camera_pos, Vector3{0.f, 0.f, -2.0f}), {}, Vector3{0.f, 1.f, 0.f});
+        Matrix4 projection = matrix4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
 
         Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_count) * 0.4f, 0.f});
         Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
 
         vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
-        vkCmdDraw(frame_cmds, ARRAYSIZE(vertices), 1, 0, 0);
+        vkCmdDrawIndexed(frame_cmds, ARRAYSIZE(indices), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(frame_cmds);
 
@@ -1418,7 +1403,7 @@ int main(int argc, char** argv)
 
     vkDestroyRenderPass(vk_device, vk_render_pass, nullptr);
     vkDestroyCommandPool(vk_device, gfx_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
-    for (s32 i = 0; i < VAttr::Count; ++i)
+    for (s32 i = 0; i < Buffer_T::Count; ++i)
     {
         destroy_gpu_buffer(vk_device, vbufs[i]);
     }

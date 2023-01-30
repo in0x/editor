@@ -4,6 +4,8 @@
 
 constexpr f32 Pi = 3.1415926535f;
 
+constexpr bool left_handed = true;
+
 static f32 degree_to_rad(f32 degrees)
 {
     return degrees * (Pi / 180.0f);
@@ -18,7 +20,7 @@ template <typename T>
 static T clamp(T v, T min, T max) {
     if (v < min) return min;
     else if (v > max) return max;
-    else return v; 
+    else return v;
 }
 
 template <typename T>
@@ -34,16 +36,27 @@ struct Vector2
 
 struct Vector3
 {
-    f32 x = 0.0f;        
-    f32 y = 0.0f;        
-    f32 z = 0.0f;        
+    f32 x = 0.0f;
+    f32 y = 0.0f;
+    f32 z = 0.0f;
 
     Vector3& operator+=(Vector3 const& other);
     Vector3& operator*=(Vector3 const& other);
+    Vector3& operator-=(Vector3 const& other);
 
     Vector3& operator+=(f32 val);
     Vector3& operator*=(f32 val);
 };
+
+Vector3 negate(Vector3 const& v)
+{
+    return Vector3{-v.x, -v.y, -v.z};
+}
+
+static Vector3 operator-(Vector3 const& v)
+{
+    return negate(v);
+}
 
 static Vector3 clamp(Vector3 v, f32 min, f32 max) {
     return Vector3 {
@@ -65,11 +78,21 @@ Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
 
 Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
 {
-    return Vector3 
+    return Vector3
     {
         lhs.x + rhs.x,
         lhs.y + rhs.y,
         lhs.z + rhs.z,
+    };
+}
+
+Vector3 vec3_sub(Vector3 const& lhs, Vector3 const& rhs)
+{
+    return Vector3
+    {
+        lhs.x - rhs.x,
+        lhs.y - rhs.y,
+        lhs.z - rhs.z,
     };
 }
 
@@ -85,11 +108,21 @@ Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
 
 Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
 {
-    return Vector3 
+    return Vector3
     {
         lhs.x + rhs,
         lhs.y + rhs,
         lhs.z + rhs,
+    };
+}
+
+Vector3 vec3_div(Vector3 const& lhs, f32 rhs)
+{
+    return Vector3
+    {
+        lhs.x / rhs,
+        lhs.y / rhs,
+        lhs.z / rhs,
     };
 }
 
@@ -102,6 +135,12 @@ Vector3& Vector3::operator+=(Vector3 const& other)
 Vector3& Vector3::operator*=(Vector3 const& other)
 {
     *this = vec3_mul(*this, other);
+    return *this;
+}
+
+Vector3& Vector3::operator-=(Vector3 const& other)
+{
+    *this = vec3_sub(*this, other);
     return *this;
 }
 
@@ -127,6 +166,11 @@ static Vector3 operator*(Vector3 const& lhs, Vector3 const& rhs)
     return vec3_mul(lhs, rhs);
 }
 
+static Vector3 operator-(Vector3 const& lhs, Vector3 const& rhs)
+{
+    return vec3_sub(lhs, rhs);
+}
+
 static Vector3 operator+(Vector3 const& v, f32 s)
 {
     return vec3_add(v, s);
@@ -137,12 +181,36 @@ static Vector3 operator*(Vector3 const& v, f32 s)
     return vec3_mul(v, s);
 }
 
+static f32 magnitude(Vector3 const& v)
+{
+    return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+static Vector3 normalized(Vector3 const& v)
+{
+    return vec3_div(v, magnitude(v));
+}
+
+static f32 dot(Vector3 const& a, Vector3 const& b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static Vector3 cross(Vector3 const& a, Vector3 const& b)
+{
+    return Vector3 {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    };
+}
+
 // We use column major convention.
 // https://fgiesen.wordpress.com/2012/02/12/row-major-vs-column-major-row-vectors-vs-column-vectors/
 
 struct Matrix4
 {
-    union 
+    union
     {
         f32 m[16];
         struct
@@ -181,7 +249,7 @@ struct Matrix4
         this->m23 = m23;
         this->m33 = m33;
     }
-    
+
     f32& operator()(u32 row, u32 col)
     {
         return m[4 * col + row];
@@ -316,29 +384,108 @@ static Matrix4 matrix4_rotate_RH(Vector3 const& angles_rad)
 
 static Matrix4 matrix4_rotate(Vector3 const& angles_rad)
 {
-    return matrix4_rotate_RH(angles_rad);
+    if constexpr (left_handed)
+    {
+        return matrix4_rotate_LH(angles_rad);
+    }
+    else
+    {
+        return matrix4_rotate_RH(angles_rad);
+    }
 }
 
+// note for future: http://perry.cz/articles/ProjectionMatrix.xhtml
 static Matrix4 matrix4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
 {
     f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
-    f32 k = far_z / (far_z - near_z);
-	
+
     return Matrix4(
         g / aspect_ratio, 0, 0, 0,
         0, g, 0, 0,
-        0, 0, k, -near_z * k,
-        0, 0, 1.0f, 0);
+        0, 0, far_z / (far_z - near_z), -near_z * (far_z / (far_z - near_z)),
+        0, 0, 1.f, 0.f);
 }
 
 static Matrix4 matrix4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
 {
     f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
-    f32 k = far_z / (near_z - far_z);
-	
+	f32 k = far_z / (far_z - near_z);
+
     return Matrix4(
         g / aspect_ratio, 0, 0, 0,
-        0, g, 0, 0,
-        0, 0, k, -(far_z * near_z) / (far_z - near_z),
-        0, 0, -1.0f, 0);
+        0, -g, 0, 0,
+        0, 0, k, -near_z * k,
+        0, 0, 1.f, 0.f);
+}
+
+static Matrix4 matrix4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+{
+    if constexpr (left_handed)
+    {
+        return matrix4_perspective_LH(vertical_fov_rad, aspect_ratio, near_z, far_z);
+    }
+    else
+    {
+        return matrix4_perspective_RH(vertical_fov_rad, aspect_ratio, near_z, far_z);
+    }
+}
+
+static Matrix4 transpose(Matrix4 const& m)
+{
+    Matrix4 out = m;
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = i + 1; j < 4; j++)
+        {
+            f32 temp = out(i, j);
+            out(i, j) = out(j, i);
+            out(j, i) = temp;
+        }
+    }
+    return out;
+}
+
+static Matrix4 matrix4_look_to_lh(Vector3 const& eye_pos, Vector3 const& eye_dir, Vector3 const& up)
+{
+    Vector3 R2 = normalized(eye_dir);
+    Vector3 R0 = normalized(cross(up, R2));
+    Vector3 R1 = cross(R2, R0);
+
+    Vector3 NegEyePosition = negate(eye_pos);
+    f32 D0 = dot(R0, NegEyePosition);
+    f32 D1 = dot(R1, NegEyePosition);
+    f32 D2 = dot(R2, NegEyePosition);
+
+    Matrix4 m(
+        R0.x, R0.y, R0.z, D0,
+        R1.x, R1.y, R1.z, D1,
+        R2.x, R2.y, R2.z, D2,
+        0.f, 0.f, 0.f, 1.f);
+
+    return m;
+}
+
+static Matrix4 matrix4_look_at_lh(Vector3 const& cameraPos, Vector3 const& target, Vector3 const& up)
+{
+    Vector3 eye_dir = vec3_sub(target, cameraPos);
+    return matrix4_look_to_lh(cameraPos, eye_dir, up);
+}
+
+static Matrix4 matrix4_look_at_rh(Vector3 const& cameraPos, Vector3 const& target, Vector3 const& up)
+{
+    Vector3 neg_eye_dir = vec3_sub(cameraPos, target);
+    return matrix4_look_to_lh(cameraPos, neg_eye_dir, up);
+}
+
+static Matrix4 matrix4_look_at(Vector3 const& cameraPos, Vector3 const& target, Vector3 const& up)
+{
+    if constexpr (left_handed)
+    {
+        return matrix4_look_at_lh(cameraPos, target, up);
+    }
+    else
+    {
+        return matrix4_look_at_rh(cameraPos, target, up);
+    }
 }

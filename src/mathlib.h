@@ -48,7 +48,12 @@ struct Vector3
     Vector3& operator*=(f32 val);
 };
 
-Vector3 negate(Vector3 const& v)
+static Vector3 vec3_zero()
+{
+    return Vector3{ 0.f, 0.f, 0.f };    
+}
+
+static Vector3 negate(Vector3 const& v)
 {
     return Vector3{-v.x, -v.y, -v.z};
 }
@@ -66,7 +71,7 @@ static Vector3 clamp(Vector3 v, f32 min, f32 max) {
     };
 }
 
-Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
 {
     return Vector3
     {
@@ -76,7 +81,7 @@ Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
     };
 }
 
-Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
 {
     return Vector3
     {
@@ -86,7 +91,7 @@ Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
     };
 }
 
-Vector3 vec3_sub(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 vec3_sub(Vector3 const& lhs, Vector3 const& rhs)
 {
     return Vector3
     {
@@ -96,7 +101,7 @@ Vector3 vec3_sub(Vector3 const& lhs, Vector3 const& rhs)
     };
 }
 
-Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
+static Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
 {
     return Vector3
     {
@@ -106,7 +111,7 @@ Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
     };
 }
 
-Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
+static Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
 {
     return Vector3
     {
@@ -116,7 +121,7 @@ Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
     };
 }
 
-Vector3 vec3_div(Vector3 const& lhs, f32 rhs)
+static Vector3 vec3_div(Vector3 const& lhs, f32 rhs)
 {
     return Vector3
     {

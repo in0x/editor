@@ -1156,8 +1156,8 @@ int main(int argc, char** argv)
     
     Timer frame_timer = make_timer();
     s64 frame_count = 0;
-    Vector3 camera_pos = {};
-    Vector3 camera_vel = {};
+
+    Vector2 azimuth_zenith;
 
     f64 s_since_step = 0;
     f64 const step_len_s = 16.6 / 1000.0; // step physics at 60 hz
@@ -1253,31 +1253,61 @@ int main(int argc, char** argv)
         vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
         vkCmdBindIndexBuffer(frame_cmds, vbufs[Buffer_T::Idx].buffer, 0, VK_INDEX_TYPE_UINT16);
 
+        // TODO zoom with mouse scroll
         s_since_step += dt_s;
-        Vector3 prev_camera_pos = camera_pos;
+        Vector2 prev_azi_zen;
         while (s_since_step >= step_len_s)
         {
-            prev_camera_pos = camera_pos;
+            // https://www.mbsoftworks.sk/tutorials/opengl4/026-camera-pt3-orbit-camera/
+            prev_azi_zen = azimuth_zenith;
 
-            f32 drag = 0.95f;
-            f32 accel = 0.0001f * step_len_s;
-            if (input_state->key_down[Input_Key_Code::A]) camera_vel.x -= accel;
-            if (input_state->key_down[Input_Key_Code::D]) camera_vel.x += accel;
-            if (input_state->key_down[Input_Key_Code::S]) camera_vel.y -= accel;
-            if (input_state->key_down[Input_Key_Code::W]) camera_vel.y += accel;
+            f32 rot_deg = degree_to_rad(0.1f) * step_len_s;
+            f32 rot_y = 0.f;
+            f32 rot_x = 0.f;
+            if (input_state->key_down[Input_Key_Code::A]) rot_y -= rot_deg;
+            if (input_state->key_down[Input_Key_Code::D]) rot_y += rot_deg;
+            if (input_state->key_down[Input_Key_Code::S]) rot_x -= rot_deg;
+            if (input_state->key_down[Input_Key_Code::W]) rot_x += rot_deg;
 
-            camera_vel *= drag;
-            camera_vel = clamp(camera_vel, -0.0001f, 0.0001f);
-            camera_pos += camera_vel;
+            if (rot_y != 0)
+            {
+                f32 full_circle = 2.f * Pi;
+                azimuth_zenith.x += rot_y;
+                azimuth_zenith.x = fmodf(azimuth_zenith.x, full_circle); // Prevent the value growing above 360 deg
+                if (azimuth_zenith.x < 0.f)
+                    azimuth_zenith.x = full_circle + azimuth_zenith.x; // Clamp negative values 0 < x < 360
+            }
+
+            if (rot_x != 0)
+            {
+                // Stop rotation at slightly below 45 degrees to prevent becoming colinear with cardinal axis
+                f32 quarter_circle = Pi / 2.0f - 0.001f;
+                azimuth_zenith.y += rot_x;
+                azimuth_zenith.y = clamp(azimuth_zenith.y, -quarter_circle, quarter_circle);
+            }
 
             s_since_step -= step_len_s;
         }
-        camera_pos = lerp(camera_pos, prev_camera_pos, s_since_step / step_len_s);
-        
-        Matrix4 view = matrix4_look_at(vec3_add(camera_pos, Vector3{0.f, 0.f, -2.0f}), {}, Vector3{0.f, 1.f, 0.f});
-        Matrix4 projection = matrix4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
+        azimuth_zenith = lerp(azimuth_zenith, prev_azi_zen, s_since_step / step_len_s);
 
-        Matrix4 model = matrix4_rotate(Vector3{0.f, degree_to_rad(frame_count) * 0.4f, 0.f});
+        Vector3 cam_pos;
+        {
+            f32 sin_azi = sinf(azimuth_zenith.x);
+            f32 cos_azi = cosf(azimuth_zenith.x);
+            f32 sin_zen = sinf(azimuth_zenith.y);
+            f32 cos_zen = cosf(azimuth_zenith.y);
+            f32 offset = 2.f;
+            cam_pos = {
+                offset * cos_zen * cos_azi,
+                offset * sin_zen,
+                offset * cos_zen * sin_azi,
+            };
+        }
+
+        Matrix4 view = matrix4_look_at(cam_pos, vec3_zero(), Vector3{0.f, 1.f, 0.f});
+        
+        Matrix4 projection = matrix4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
+        Matrix4 model = matrix4_identity();
         Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
 
         vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);

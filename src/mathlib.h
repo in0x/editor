@@ -16,6 +16,17 @@ static f32 rad_to_degree(f32 radians)
     return radians * (180.0f / Pi);
 }
 
+// TODO enfore use of these
+struct Radians
+{
+    f32 value;
+};
+
+struct Degrees
+{
+    f32 value;
+};
+
 template <typename T>
 static T clamp(T v, T min, T max) {
     if (v < min) return min;
@@ -32,7 +43,55 @@ struct Vector2
 {
     f32 x = 0.0f;
     f32 y = 0.0f;
+
+    Vector2& operator+=(Vector2 other);
 };
+
+static Vector2 vec2_add(Vector2 lhs, Vector2 rhs)
+{
+    return Vector2{ lhs.x + rhs.x, lhs.y + rhs.y };
+}
+
+static Vector2 vec2_sub(Vector2 lhs, Vector2 rhs)
+{
+    return Vector2{ lhs.x - rhs.x, lhs.y - rhs.y };
+}
+
+static Vector2 vec2_mul(Vector2 lhs, Vector2 rhs)
+{
+    return Vector2{ lhs.x * rhs.x, lhs.y * rhs.y };
+}
+
+static Vector2 vec2_div(Vector2 lhs, Vector2 rhs)
+{
+    return Vector2{ lhs.x / rhs.x, lhs.y / rhs.y };
+}
+
+static Vector2 vec2_mul(Vector2 v, f32 f)
+{
+    return Vector2{ v.x * f, v.y * f };
+}
+
+Vector2& Vector2::operator+=(Vector2 other)
+{
+    *this = vec2_add(*this, other);
+    return *this;
+}
+
+static Vector2 operator*(Vector2 lhs, Vector2 rhs)
+{
+    return vec2_mul(lhs, rhs);
+}
+
+static Vector2 operator+(Vector2 lhs, Vector2 rhs)
+{
+    return vec2_add(lhs, rhs);
+}
+
+static Vector2 operator*(Vector2 v, f32 f)
+{
+    return vec2_mul(v, f);
+}
 
 struct Vector3
 {
@@ -40,12 +99,18 @@ struct Vector3
     f32 y = 0.0f;
     f32 z = 0.0f;
 
-    Vector3& operator+=(Vector3 const& other);
-    Vector3& operator*=(Vector3 const& other);
-    Vector3& operator-=(Vector3 const& other);
+    Vector3& operator+=(Vector3 other);
+    Vector3& operator*=(Vector3 other);
+    Vector3& operator-=(Vector3 other);
 
     Vector3& operator+=(f32 val);
     Vector3& operator*=(f32 val);
+
+    f32& operator[](int i)
+    {
+        ASSERT(i >= 0 && i <= 2);
+        return ((f32*)this)[i];
+    }
 };
 
 static Vector3 vec3_zero()
@@ -53,12 +118,12 @@ static Vector3 vec3_zero()
     return Vector3{ 0.f, 0.f, 0.f };    
 }
 
-static Vector3 negate(Vector3 const& v)
+static Vector3 negate(Vector3 v)
 {
     return Vector3{-v.x, -v.y, -v.z};
 }
 
-static Vector3 operator-(Vector3 const& v)
+static Vector3 operator-(Vector3 v)
 {
     return negate(v);
 }
@@ -71,7 +136,7 @@ static Vector3 clamp(Vector3 v, f32 min, f32 max) {
     };
 }
 
-static Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 vec3_mul(Vector3 lhs, Vector3 rhs)
 {
     return Vector3
     {
@@ -81,7 +146,7 @@ static Vector3 vec3_mul(Vector3 const& lhs, Vector3 const& rhs)
     };
 }
 
-static Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 vec3_add(Vector3 lhs, Vector3 rhs)
 {
     return Vector3
     {
@@ -91,7 +156,7 @@ static Vector3 vec3_add(Vector3 const& lhs, Vector3 const& rhs)
     };
 }
 
-static Vector3 vec3_sub(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 vec3_sub(Vector3 lhs, Vector3 rhs)
 {
     return Vector3
     {
@@ -101,7 +166,7 @@ static Vector3 vec3_sub(Vector3 const& lhs, Vector3 const& rhs)
     };
 }
 
-static Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
+static Vector3 vec3_mul(Vector3 lhs, f32 rhs)
 {
     return Vector3
     {
@@ -111,7 +176,7 @@ static Vector3 vec3_mul(Vector3 const& lhs, f32 rhs)
     };
 }
 
-static Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
+static Vector3 vec3_add(Vector3 lhs, f32 rhs)
 {
     return Vector3
     {
@@ -121,7 +186,7 @@ static Vector3 vec3_add(Vector3 const& lhs, f32 rhs)
     };
 }
 
-static Vector3 vec3_div(Vector3 const& lhs, f32 rhs)
+static Vector3 vec3_div(Vector3 lhs, f32 rhs)
 {
     return Vector3
     {
@@ -131,19 +196,19 @@ static Vector3 vec3_div(Vector3 const& lhs, f32 rhs)
     };
 }
 
-Vector3& Vector3::operator+=(Vector3 const& other)
+Vector3& Vector3::operator+=(Vector3 other)
 {
     *this = vec3_add(*this, other);
     return *this;
 }
 
-Vector3& Vector3::operator*=(Vector3 const& other)
+Vector3& Vector3::operator*=(Vector3 other)
 {
     *this = vec3_mul(*this, other);
     return *this;
 }
 
-Vector3& Vector3::operator-=(Vector3 const& other)
+Vector3& Vector3::operator-=(Vector3 other)
 {
     *this = vec3_sub(*this, other);
     return *this;
@@ -161,47 +226,47 @@ Vector3& Vector3::operator*=(f32 val)
     return *this;
 }
 
-static Vector3 operator+(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 operator+(Vector3 lhs, Vector3 rhs)
 {
     return vec3_add(lhs, rhs);
 }
 
-static Vector3 operator*(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 operator*(Vector3 lhs, Vector3 rhs)
 {
     return vec3_mul(lhs, rhs);
 }
 
-static Vector3 operator-(Vector3 const& lhs, Vector3 const& rhs)
+static Vector3 operator-(Vector3 lhs, Vector3 rhs)
 {
     return vec3_sub(lhs, rhs);
 }
 
-static Vector3 operator+(Vector3 const& v, f32 s)
+static Vector3 operator+(Vector3 v, f32 s)
 {
     return vec3_add(v, s);
 }
 
-static Vector3 operator*(Vector3 const& v, f32 s)
+static Vector3 operator*(Vector3 v, f32 s)
 {
     return vec3_mul(v, s);
 }
 
-static f32 magnitude(Vector3 const& v)
+static f32 magnitude(Vector3 v)
 {
     return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
-static Vector3 normalized(Vector3 const& v)
+static Vector3 normalized(Vector3 v)
 {
     return vec3_div(v, magnitude(v));
 }
 
-static f32 dot(Vector3 const& a, Vector3 const& b)
+static f32 dot(Vector3 a, Vector3 b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-static Vector3 cross(Vector3 const& a, Vector3 const& b)
+static Vector3 cross(Vector3 a, Vector3 b)
 {
     return Vector3 {
         a.y * b.z - a.z * b.y,
@@ -209,6 +274,20 @@ static Vector3 cross(Vector3 const& a, Vector3 const& b)
         a.x * b.y - a.y * b.x
     };
 }
+
+struct Vector4
+{
+    f32 x = 0.0f;
+    f32 y = 0.0f;
+    f32 z = 0.0f;
+    f32 w = 0.0f;
+
+    f32& operator[](int i)
+    {
+        ASSERT(i >= 0 && i <= 3);
+        return ((f32*)this)[i];
+    }
+};
 
 // We use column major convention.
 // https://fgiesen.wordpress.com/2012/02/12/row-major-vs-column-major-row-vectors-vs-column-vectors/
@@ -317,6 +396,16 @@ static Matrix4 matrix4_mul(Matrix4 const& lhs, Matrix4 const& rhs)
     return result;
 }
 
+static Vector4 matrix4_mul(Matrix4 const& m, Vector4 v)
+{
+    Vector4 out;
+    for (int i = 0; i < 4; ++i)
+    {
+        out[i] = m(i, 0) * v[0] + m(i, 1) * v[1] + m(i, 2) * v[2] + m(i, 3) * v[3]; 
+    }
+    return out;
+}
+
 static void test_matrix4_mul()
 {
     Matrix4 lhs(
@@ -354,7 +443,7 @@ static void test_matrix4_mul()
     ASSERT(matrix4_eq(r_to_l_expected, r_to_l));
 }
 
-static Matrix4 matrix4_translate(Vector3 const& translation)
+static Matrix4 matrix4_translate(Vector3 translation)
 {
     Matrix4 result = matrix4_identity();
     result.m03 = translation.x;
@@ -363,75 +452,91 @@ static Matrix4 matrix4_translate(Vector3 const& translation)
     return result;
 }
 
-static Matrix4 matrix4_rotate_LH(Vector3 const& angles_rad)
+static Matrix4 matrix4_translate(f32 x, f32 y, f32 z)
 {
-    f32 const A = cosf(angles_rad.x);
-    f32 const B = sinf(angles_rad.x);
-    f32 const C = cosf(angles_rad.y);
-    f32 const D = sinf(angles_rad.y);
-    f32 const E = cosf(angles_rad.z);
-    f32 const F = sinf(angles_rad.z);
-
-    return Matrix4(
-        C * E,             -C * F,             -D,     0.0f,
-        -B * D * E + A * F, B * D * F + A * E, -B * C, 0.0f,
-        A * D * E + B * F, -A * D * F + B * E, A * C,  0.0f,
-        0.0f,              0.0f,               0.0f,   1.0f
-    );
+    return matrix4_translate(Vector3{x, y, z});
 }
 
-static Matrix4 matrix4_rotate_RH(Vector3 const& angles_rad)
+namespace detail
 {
-    Vector3 flipped_angles = angles_rad;
-    flipped_angles.y *= -1;
-    return matrix4_rotate_LH(flipped_angles);
+    static Matrix4 matrix4_rotate_LH(Vector3 angles_rad)
+    {
+        f32 const A = cosf(angles_rad.x);
+        f32 const B = sinf(angles_rad.x);
+        f32 const C = cosf(angles_rad.y);
+        f32 const D = sinf(angles_rad.y);
+        f32 const E = cosf(angles_rad.z);
+        f32 const F = sinf(angles_rad.z);
+
+        return Matrix4(
+            C * E,             -C * F,             -D,     0.0f,
+            -B * D * E + A * F, B * D * F + A * E, -B * C, 0.0f,
+            A * D * E + B * F, -A * D * F + B * E, A * C,  0.0f,
+            0.0f,              0.0f,               0.0f,   1.0f
+        );
+    }
+
+    static Matrix4 matrix4_rotate_RH(Vector3 angles_rad)
+    {
+        Vector3 flipped_angles = angles_rad;
+        flipped_angles.y *= -1;
+        return matrix4_rotate_LH(flipped_angles);
+    }
 }
 
-static Matrix4 matrix4_rotate(Vector3 const& angles_rad)
+static Matrix4 matrix4_rotate(Vector3 angles_rad)
 {
     if constexpr (left_handed)
     {
-        return matrix4_rotate_LH(angles_rad);
+        return detail::matrix4_rotate_LH(angles_rad);
     }
     else
     {
-        return matrix4_rotate_RH(angles_rad);
+        return detail::matrix4_rotate_RH(angles_rad);
     }
 }
 
-// note for future: http://perry.cz/articles/ProjectionMatrix.xhtml
-static Matrix4 matrix4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+static Matrix4 matrix4_rotate(f32 rad_x, f32 rad_y, f32 rad_z)
 {
-    f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
-
-    return Matrix4(
-        g / aspect_ratio, 0, 0, 0,
-        0, g, 0, 0,
-        0, 0, far_z / (far_z - near_z), -near_z * (far_z / (far_z - near_z)),
-        0, 0, 1.f, 0.f);
+    return matrix4_rotate(Vector3{rad_x, rad_y, rad_z});
 }
 
-static Matrix4 matrix4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+namespace detail
 {
-    f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
-	f32 k = far_z / (far_z - near_z);
+    // note for future: http://perry.cz/articles/ProjectionMatrix.xhtml
+    static Matrix4 matrix4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+    {
+        f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
 
-    return Matrix4(
-        g / aspect_ratio, 0, 0, 0,
-        0, -g, 0, 0,
-        0, 0, k, -near_z * k,
-        0, 0, 1.f, 0.f);
+        return Matrix4(
+            g / aspect_ratio, 0, 0, 0,
+            0, g, 0, 0,
+            0, 0, far_z / (far_z - near_z), -near_z * (far_z / (far_z - near_z)),
+            0, 0, 1.f, 0.f);
+    }
+
+    static Matrix4 matrix4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+    {
+        f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
+        f32 k = far_z / (far_z - near_z);
+
+        return Matrix4(
+            g / aspect_ratio, 0, 0, 0,
+            0, -g, 0, 0,
+            0, 0, k, -near_z * k,
+            0, 0, 1.f, 0.f);
+    }
 }
 
 static Matrix4 matrix4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
 {
     if constexpr (left_handed)
     {
-        return matrix4_perspective_LH(vertical_fov_rad, aspect_ratio, near_z, far_z);
+        return detail::matrix4_perspective_LH(vertical_fov_rad, aspect_ratio, near_z, far_z);
     }
     else
     {
-        return matrix4_perspective_RH(vertical_fov_rad, aspect_ratio, near_z, far_z);
+        return detail::matrix4_perspective_RH(vertical_fov_rad, aspect_ratio, near_z, far_z);
     }
 }
 
@@ -451,46 +556,49 @@ static Matrix4 transpose(Matrix4 const& m)
     return out;
 }
 
-static Matrix4 matrix4_look_to_lh(Vector3 const& eye_pos, Vector3 const& eye_dir, Vector3 const& up)
+namespace detail
 {
-    Vector3 R2 = normalized(eye_dir);
-    Vector3 R0 = normalized(cross(up, R2));
-    Vector3 R1 = cross(R2, R0);
+    static Matrix4 matrix4_look_to_lh(Vector3 eye_pos, Vector3 eye_dir, Vector3 up)
+    {
+        Vector3 R2 = normalized(eye_dir);
+        Vector3 R0 = normalized(cross(up, R2));
+        Vector3 R1 = cross(R2, R0);
 
-    Vector3 NegEyePosition = negate(eye_pos);
-    f32 D0 = dot(R0, NegEyePosition);
-    f32 D1 = dot(R1, NegEyePosition);
-    f32 D2 = dot(R2, NegEyePosition);
+        Vector3 NegEyePosition = negate(eye_pos);
+        f32 D0 = dot(R0, NegEyePosition);
+        f32 D1 = dot(R1, NegEyePosition);
+        f32 D2 = dot(R2, NegEyePosition);
 
-    Matrix4 m(
-        R0.x, R0.y, R0.z, D0,
-        R1.x, R1.y, R1.z, D1,
-        R2.x, R2.y, R2.z, D2,
-        0.f, 0.f, 0.f, 1.f);
+        Matrix4 m(
+            R0.x, R0.y, R0.z, D0,
+            R1.x, R1.y, R1.z, D1,
+            R2.x, R2.y, R2.z, D2,
+            0.f, 0.f, 0.f, 1.f);
 
-    return m;
+        return m;
+    }
+
+    static Matrix4 matrix4_look_at_lh(Vector3 cameraPos, Vector3 target, Vector3 up)
+    {
+        Vector3 eye_dir = vec3_sub(target, cameraPos);
+        return matrix4_look_to_lh(cameraPos, eye_dir, up);
+    }
+
+    static Matrix4 matrix4_look_at_rh(Vector3 cameraPos, Vector3 target, Vector3 up)
+    {
+        Vector3 neg_eye_dir = vec3_sub(cameraPos, target);
+        return matrix4_look_to_lh(cameraPos, neg_eye_dir, up);
+    }
 }
 
-static Matrix4 matrix4_look_at_lh(Vector3 const& cameraPos, Vector3 const& target, Vector3 const& up)
-{
-    Vector3 eye_dir = vec3_sub(target, cameraPos);
-    return matrix4_look_to_lh(cameraPos, eye_dir, up);
-}
-
-static Matrix4 matrix4_look_at_rh(Vector3 const& cameraPos, Vector3 const& target, Vector3 const& up)
-{
-    Vector3 neg_eye_dir = vec3_sub(cameraPos, target);
-    return matrix4_look_to_lh(cameraPos, neg_eye_dir, up);
-}
-
-static Matrix4 matrix4_look_at(Vector3 const& cameraPos, Vector3 const& target, Vector3 const& up)
+static Matrix4 matrix4_look_at(Vector3 cameraPos, Vector3 target, Vector3 up)
 {
     if constexpr (left_handed)
     {
-        return matrix4_look_at_lh(cameraPos, target, up);
+        return detail::matrix4_look_at_lh(cameraPos, target, up);
     }
     else
     {
-        return matrix4_look_at_rh(cameraPos, target, up);
+        return detail::matrix4_look_at_rh(cameraPos, target, up);
     }
 }

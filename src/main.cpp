@@ -518,10 +518,10 @@ struct Cube_Geo
     //   4    7
     // 0    3
     // Vertex order when viewed head on: BL, TL, TR, BR
-    constexpr static Vector3 vertices[] = 
+    constexpr static Vec3 vertices[] = 
     { 
-        Vector3{-0.5f, -0.5f, -0.5f}, Vector3{-0.5f, 0.5f, -0.5f}, Vector3{0.5f, 0.5f, -0.5f}, Vector3{0.5f, -0.5f, -0.5f},
-        Vector3{-0.5f, -0.5f, 0.5f}, Vector3{-0.5f, 0.5f, 0.5f}, Vector3{0.5f, 0.5f, 0.5f}, Vector3{0.5f, -0.5f, 0.5f},
+        Vec3{-0.5f, -0.5f, -0.5f}, Vec3{-0.5f, 0.5f, -0.5f}, Vec3{0.5f, 0.5f, -0.5f}, Vec3{0.5f, -0.5f, -0.5f},
+        Vec3{-0.5f, -0.5f, 0.5f}, Vec3{-0.5f, 0.5f, 0.5f}, Vec3{0.5f, 0.5f, 0.5f}, Vec3{0.5f, -0.5f, 0.5f},
     };
 
     constexpr u16 static indices[] =
@@ -536,10 +536,10 @@ struct Cube_Geo
 
     // RGB Cube
     // https://www.pngitem.com/pimgs/m/592-5920896_rgb-color-model-cube-hd-png-download.png
-    constexpr Vector3 static colors[] = 
+    constexpr Vec3 static colors[] = 
     {
-        Vector3{1.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 1.0f}, Vector3{1.0f, 1.0f, 1.0f}, Vector3{1.0f, 1.0f, 0.0f},
-        Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}, Vector3{0.0f, 1.0f, 1.0f}, Vector3{0.0f, 1.0f, 0.0f},
+        Vec3{1.0f, 0.0f, 0.0f}, Vec3{1.0f, 0.0f, 1.0f}, Vec3{1.0f, 1.0f, 1.0f}, Vec3{1.0f, 1.0f, 0.0f},
+        Vec3{0.0f, 0.0f, 0.0f}, Vec3{0.0f, 0.0f, 1.0f}, Vec3{0.0f, 1.0f, 1.0f}, Vec3{0.0f, 1.0f, 0.0f},
     };    
 };
 
@@ -843,7 +843,7 @@ int main(int argc, char** argv)
         LOG("Root directory: \"%s\"", root_dir);
     }
 
-    test_matrix4_mul();
+    test_mat4_mul();
 
     VK_CHECK(volkInitialize());
 
@@ -980,8 +980,8 @@ int main(int argc, char** argv)
     }
 
     enum Buffer_T { Pos = 0, Col, Idx, Count, Vert_T_Cnt = 2 };
-    Vector3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
-    Vector3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
+    Vec3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
+    Vec3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
     u16 const (&indices) [ARRAYSIZE(Cube_Geo::indices)] = Cube_Geo::indices;
     VkPipeline triangle_pipeline = VK_NULL_HANDLE;
     {
@@ -989,8 +989,8 @@ int main(int argc, char** argv)
         VkVertexInputBindingDescription vert_binds[Buffer_T::Vert_T_Cnt];
         vert_binds[Buffer_T::Pos].binding = Buffer_T::Pos;
         vert_binds[Buffer_T::Col].binding = Buffer_T::Col;
-        vert_binds[Buffer_T::Col].stride = sizeof(Vector3);
-        vert_binds[Buffer_T::Pos].stride = sizeof(Vector3);
+        vert_binds[Buffer_T::Col].stride = sizeof(Vec3);
+        vert_binds[Buffer_T::Pos].stride = sizeof(Vec3);
         vert_binds[Buffer_T::Pos].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
         vert_binds[Buffer_T::Col].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
@@ -1157,7 +1157,7 @@ int main(int argc, char** argv)
     Timer frame_timer = make_timer();
     s64 frame_count = 0;
 
-    Vector3 azi_zen_zoom;
+    Vec3 azi_zen_zoom;
 
     f64 s_since_step = 0;
     f64 const step_len_s = 16.6 / 1000.0; // step physics at 60 hz
@@ -1253,10 +1253,8 @@ int main(int argc, char** argv)
         vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
         vkCmdBindIndexBuffer(frame_cmds, vbufs[Buffer_T::Idx].buffer, 0, VK_INDEX_TYPE_UINT16);
 
-        // TODO zoom with mouse scroll
-        // TODO flip the other axis when they rotation flips over
         s_since_step += dt_s;
-        Vector3 prev_azi_zen;
+        Vec3 prev_azi_zen;
         while (s_since_step >= step_len_s)
         {
             // https://www.mbsoftworks.sk/tutorials/opengl4/026-camera-pt3-orbit-camera/
@@ -1299,7 +1297,7 @@ int main(int argc, char** argv)
         azi_zen_zoom = lerp(azi_zen_zoom, prev_azi_zen, s_since_step / step_len_s);
         azi_zen_zoom.z = clamp(azi_zen_zoom.z, 2.f, 10.f);
 
-        Vector3 cam_pos;
+        Vec3 cam_pos;
         {
             f32 sin_azi = sinf(azi_zen_zoom.x);
             f32 cos_azi = cosf(azi_zen_zoom.x);
@@ -1312,11 +1310,11 @@ int main(int argc, char** argv)
             };
         }
 
-        Matrix4 view = matrix4_look_at(cam_pos, vec3_zero(), Vector3{0.f, 1.f, 0.f});
+        Matrix4 view = mat4_look_at(cam_pos, vec3_zero(), Vec3{0.f, 1.f, 0.f});
         
-        Matrix4 projection = matrix4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
-        Matrix4 model = matrix4_identity();
-        Matrix4 mesh_matrix = matrix4_mul(projection, matrix4_mul(view, model));
+        Matrix4 projection = mat4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
+        Matrix4 model = mat4_identity();
+        Matrix4 mesh_matrix = mat4_mul(projection, mat4_mul(view, model));
 
         vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
         vkCmdDrawIndexed(frame_cmds, ARRAYSIZE(indices), 1, 0, 0, 0);

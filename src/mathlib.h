@@ -39,72 +39,72 @@ static T lerp(T a, T b, f32 t) {
     return a * t + b * (1.0 - t);
 }
 
-struct Vector2
+struct Vec2
 {
     f32 x = 0.0f;
     f32 y = 0.0f;
 
-    Vector2& operator+=(Vector2 other);
+    Vec2& operator+=(Vec2 other);
 };
 
-static Vector2 vec2_add(Vector2 lhs, Vector2 rhs)
+static Vec2 vec2_add(Vec2 lhs, Vec2 rhs)
 {
-    return Vector2{ lhs.x + rhs.x, lhs.y + rhs.y };
+    return Vec2{ lhs.x + rhs.x, lhs.y + rhs.y };
 }
 
-static Vector2 vec2_sub(Vector2 lhs, Vector2 rhs)
+static Vec2 vec2_sub(Vec2 lhs, Vec2 rhs)
 {
-    return Vector2{ lhs.x - rhs.x, lhs.y - rhs.y };
+    return Vec2{ lhs.x - rhs.x, lhs.y - rhs.y };
 }
 
-static Vector2 vec2_mul(Vector2 lhs, Vector2 rhs)
+static Vec2 vec2_mul(Vec2 lhs, Vec2 rhs)
 {
-    return Vector2{ lhs.x * rhs.x, lhs.y * rhs.y };
+    return Vec2{ lhs.x * rhs.x, lhs.y * rhs.y };
 }
 
-static Vector2 vec2_div(Vector2 lhs, Vector2 rhs)
+static Vec2 vec2_div(Vec2 lhs, Vec2 rhs)
 {
-    return Vector2{ lhs.x / rhs.x, lhs.y / rhs.y };
+    return Vec2{ lhs.x / rhs.x, lhs.y / rhs.y };
 }
 
-static Vector2 vec2_mul(Vector2 v, f32 f)
+static Vec2 vec2_mul(Vec2 v, f32 f)
 {
-    return Vector2{ v.x * f, v.y * f };
+    return Vec2{ v.x * f, v.y * f };
 }
 
-Vector2& Vector2::operator+=(Vector2 other)
+Vec2& Vec2::operator+=(Vec2 other)
 {
     *this = vec2_add(*this, other);
     return *this;
 }
 
-static Vector2 operator*(Vector2 lhs, Vector2 rhs)
+static Vec2 operator*(Vec2 lhs, Vec2 rhs)
 {
     return vec2_mul(lhs, rhs);
 }
 
-static Vector2 operator+(Vector2 lhs, Vector2 rhs)
+static Vec2 operator+(Vec2 lhs, Vec2 rhs)
 {
     return vec2_add(lhs, rhs);
 }
 
-static Vector2 operator*(Vector2 v, f32 f)
+static Vec2 operator*(Vec2 v, f32 f)
 {
     return vec2_mul(v, f);
 }
 
-struct Vector3
+struct Vec3
 {
     f32 x = 0.0f;
     f32 y = 0.0f;
     f32 z = 0.0f;
 
-    Vector3& operator+=(Vector3 other);
-    Vector3& operator*=(Vector3 other);
-    Vector3& operator-=(Vector3 other);
+    Vec3& operator+=(Vec3 other);
+    Vec3& operator*=(Vec3 other);
+    Vec3& operator-=(Vec3 other);
 
-    Vector3& operator+=(f32 val);
-    Vector3& operator*=(f32 val);
+    Vec3& operator+=(f32 val);
+    Vec3& operator*=(f32 val);
 
     f32& operator[](int i)
     {
@@ -113,32 +113,32 @@ struct Vector3
     }
 };
 
-static Vector3 vec3_zero()
+static Vec3 vec3_zero()
 {
-    return Vector3{ 0.f, 0.f, 0.f };    
+    return Vec3{ 0.f, 0.f, 0.f };    
 }
 
-static Vector3 negate(Vector3 v)
+static Vec3 negate(Vec3 v)
 {
-    return Vector3{-v.x, -v.y, -v.z};
+    return Vec3{-v.x, -v.y, -v.z};
 }
 
-static Vector3 operator-(Vector3 v)
+static Vec3 operator-(Vec3 v)
 {
     return negate(v);
 }
 
-static Vector3 clamp(Vector3 v, f32 min, f32 max) {
-    return Vector3 {
+static Vec3 clamp(Vec3 v, f32 min, f32 max) {
+    return Vec3 {
         clamp(v.x, min, max),
         clamp(v.y, min, max),
         clamp(v.z, min, max)
     };
 }
 
-static Vector3 vec3_mul(Vector3 lhs, Vector3 rhs)
+static Vec3 vec3_mul(Vec3 lhs, Vec3 rhs)
 {
-    return Vector3
+    return Vec3
     {
         lhs.x * rhs.x,
         lhs.y * rhs.y,
@@ -146,9 +146,9 @@ static Vector3 vec3_mul(Vector3 lhs, Vector3 rhs)
     };
 }
 
-static Vector3 vec3_add(Vector3 lhs, Vector3 rhs)
+static Vec3 vec3_add(Vec3 lhs, Vec3 rhs)
 {
-    return Vector3
+    return Vec3
     {
         lhs.x + rhs.x,
         lhs.y + rhs.y,
@@ -156,9 +156,9 @@ static Vector3 vec3_add(Vector3 lhs, Vector3 rhs)
     };
 }
 
-static Vector3 vec3_sub(Vector3 lhs, Vector3 rhs)
+static Vec3 vec3_sub(Vec3 lhs, Vec3 rhs)
 {
-    return Vector3
+    return Vec3
     {
         lhs.x - rhs.x,
         lhs.y - rhs.y,
@@ -166,9 +166,9 @@ static Vector3 vec3_sub(Vector3 lhs, Vector3 rhs)
     };
 }
 
-static Vector3 vec3_mul(Vector3 lhs, f32 rhs)
+static Vec3 vec3_mul(Vec3 lhs, f32 rhs)
 {
-    return Vector3
+    return Vec3
     {
         lhs.x * rhs,
         lhs.y * rhs,
@@ -176,9 +176,9 @@ static Vector3 vec3_mul(Vector3 lhs, f32 rhs)
     };
 }
 
-static Vector3 vec3_add(Vector3 lhs, f32 rhs)
+static Vec3 vec3_add(Vec3 lhs, f32 rhs)
 {
-    return Vector3
+    return Vec3
     {
         lhs.x + rhs,
         lhs.y + rhs,
@@ -186,9 +186,9 @@ static Vector3 vec3_add(Vector3 lhs, f32 rhs)
     };
 }
 
-static Vector3 vec3_div(Vector3 lhs, f32 rhs)
+static Vec3 vec3_div(Vec3 lhs, f32 rhs)
 {
-    return Vector3
+    return Vec3
     {
         lhs.x / rhs,
         lhs.y / rhs,
@@ -196,86 +196,86 @@ static Vector3 vec3_div(Vector3 lhs, f32 rhs)
     };
 }
 
-Vector3& Vector3::operator+=(Vector3 other)
+Vec3& Vec3::operator+=(Vec3 other)
 {
     *this = vec3_add(*this, other);
     return *this;
 }
 
-Vector3& Vector3::operator*=(Vector3 other)
+Vec3& Vec3::operator*=(Vec3 other)
 {
     *this = vec3_mul(*this, other);
     return *this;
 }
 
-Vector3& Vector3::operator-=(Vector3 other)
+Vec3& Vec3::operator-=(Vec3 other)
 {
     *this = vec3_sub(*this, other);
     return *this;
 }
 
-Vector3& Vector3::operator+=(f32 val)
+Vec3& Vec3::operator+=(f32 val)
 {
     *this = vec3_add(*this, val);
     return *this;
 }
 
-Vector3& Vector3::operator*=(f32 val)
+Vec3& Vec3::operator*=(f32 val)
 {
     *this = vec3_mul(*this, val);
     return *this;
 }
 
-static Vector3 operator+(Vector3 lhs, Vector3 rhs)
+static Vec3 operator+(Vec3 lhs, Vec3 rhs)
 {
     return vec3_add(lhs, rhs);
 }
 
-static Vector3 operator*(Vector3 lhs, Vector3 rhs)
+static Vec3 operator*(Vec3 lhs, Vec3 rhs)
 {
     return vec3_mul(lhs, rhs);
 }
 
-static Vector3 operator-(Vector3 lhs, Vector3 rhs)
+static Vec3 operator-(Vec3 lhs, Vec3 rhs)
 {
     return vec3_sub(lhs, rhs);
 }
 
-static Vector3 operator+(Vector3 v, f32 s)
+static Vec3 operator+(Vec3 v, f32 s)
 {
     return vec3_add(v, s);
 }
 
-static Vector3 operator*(Vector3 v, f32 s)
+static Vec3 operator*(Vec3 v, f32 s)
 {
     return vec3_mul(v, s);
 }
 
-static f32 magnitude(Vector3 v)
+static f32 magnitude(Vec3 v)
 {
     return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
-static Vector3 normalized(Vector3 v)
+static Vec3 normalized(Vec3 v)
 {
     return vec3_div(v, magnitude(v));
 }
 
-static f32 dot(Vector3 a, Vector3 b)
+static f32 dot(Vec3 a, Vec3 b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-static Vector3 cross(Vector3 a, Vector3 b)
+static Vec3 cross(Vec3 a, Vec3 b)
 {
-    return Vector3 {
+    return Vec3 {
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
         a.x * b.y - a.y * b.x
     };
 }
 
-struct Vector4
+struct Vec4
 {
     f32 x = 0.0f;
     f32 y = 0.0f;
@@ -345,7 +345,7 @@ struct Matrix4
     }
 };
 
-static Matrix4 matrix4_zero()
+static Matrix4 mat4_zero()
 {
     return Matrix4(
         0.f, 0.f, 0.f, 0.f,
@@ -355,7 +355,7 @@ static Matrix4 matrix4_zero()
     );
 }
 
-static Matrix4 matrix4_identity()
+static Matrix4 mat4_identity()
 {
     return Matrix4(
         1.f, 0.f, 0.f, 0.f,
@@ -365,7 +365,7 @@ static Matrix4 matrix4_identity()
     );
 }
 
-static bool matrix4_eq(Matrix4 const& lhs, Matrix4 const& rhs)
+static bool mat4_eq(Matrix4 const& lhs, Matrix4 const& rhs)
 {
     for (u32 row = 0; row < 4; ++row)
     {
@@ -377,9 +377,9 @@ static bool matrix4_eq(Matrix4 const& lhs, Matrix4 const& rhs)
     return true;
 }
 
-static Matrix4 matrix4_mul(Matrix4 const& lhs, Matrix4 const& rhs)
+static Matrix4 mat4_mul(Matrix4 const& lhs, Matrix4 const& rhs)
 {
-    Matrix4 result = matrix4_zero();
+    Matrix4 result = mat4_zero();
 
     for (u32 row = 0; row < 4; ++row)
     {
@@ -396,9 +396,9 @@ static Matrix4 matrix4_mul(Matrix4 const& lhs, Matrix4 const& rhs)
     return result;
 }
 
-static Vector4 matrix4_mul(Matrix4 const& m, Vector4 v)
+static Vec4 mat4_mul(Matrix4 const& m, Vec4 v)
 {
-    Vector4 out;
+    Vec4 out;
     for (int i = 0; i < 4; ++i)
     {
         out[i] = m(i, 0) * v[0] + m(i, 1) * v[1] + m(i, 2) * v[2] + m(i, 3) * v[3]; 
@@ -406,7 +406,7 @@ static Vector4 matrix4_mul(Matrix4 const& m, Vector4 v)
     return out;
 }
 
-static void test_matrix4_mul()
+static void test_mat4_mul()
 {
     Matrix4 lhs(
         1.f, 8.f, 4.f, 5.f,
@@ -422,7 +422,7 @@ static void test_matrix4_mul()
         9.f, 8.f, 5.f, 7.f
     );
 
-    Matrix4 l_to_r = matrix4_mul(lhs, rhs);
+    Matrix4 l_to_r = mat4_mul(lhs, rhs);
     Matrix4 l_to_r_expected(
         105.f, 106.f, 78.f, 53.f,
         124.f, 84.f, 100.f, 65.f,
@@ -430,9 +430,9 @@ static void test_matrix4_mul()
         155.f, 110.f, 133.f, 65.f
     );
 
-    ASSERT(matrix4_eq(l_to_r_expected, l_to_r));
+    ASSERT(mat4_eq(l_to_r_expected, l_to_r));
 
-    Matrix4 r_to_l = matrix4_mul(rhs, lhs);
+    Matrix4 r_to_l = mat4_mul(rhs, lhs);
     Matrix4 r_to_l_expected(
         63.f, 161.f, 123.f, 82.f,
         53.f, 76.f, 57.f, 63.f,
@@ -440,26 +440,26 @@ static void test_matrix4_mul()
         128.f, 175.f, 117.f, 146.f
     );
 
-    ASSERT(matrix4_eq(r_to_l_expected, r_to_l));
+    ASSERT(mat4_eq(r_to_l_expected, r_to_l));
 }
 
-static Matrix4 matrix4_translate(Vector3 translation)
+static Matrix4 mat4_translate(Vec3 translation)
 {
-    Matrix4 result = matrix4_identity();
+    Matrix4 result = mat4_identity();
     result.m03 = translation.x;
     result.m13 = translation.y;
     result.m23 = translation.z;
     return result;
 }
 
-static Matrix4 matrix4_translate(f32 x, f32 y, f32 z)
+static Matrix4 mat4_translate(f32 x, f32 y, f32 z)
 {
-    return matrix4_translate(Vector3{x, y, z});
+    return mat4_translate(Vec3{x, y, z});
 }
 
 namespace detail
 {
-    static Matrix4 matrix4_rotate_LH(Vector3 angles_rad)
+    static Matrix4 mat4_rotate_LH(Vec3 angles_rad)
     {
         f32 const A = cosf(angles_rad.x);
         f32 const B = sinf(angles_rad.x);
@@ -476,35 +476,35 @@ namespace detail
         );
     }
 
-    static Matrix4 matrix4_rotate_RH(Vector3 angles_rad)
+    static Matrix4 mat4_rotate_RH(Vec3 angles_rad)
     {
-        Vector3 flipped_angles = angles_rad;
+        Vec3 flipped_angles = angles_rad;
         flipped_angles.y *= -1;
-        return matrix4_rotate_LH(flipped_angles);
+        return mat4_rotate_LH(flipped_angles);
     }
 }
 
-static Matrix4 matrix4_rotate(Vector3 angles_rad)
+static Matrix4 mat4_rotate(Vec3 angles_rad)
 {
     if constexpr (left_handed)
     {
-        return detail::matrix4_rotate_LH(angles_rad);
+        return detail::mat4_rotate_LH(angles_rad);
     }
     else
     {
-        return detail::matrix4_rotate_RH(angles_rad);
+        return detail::mat4_rotate_RH(angles_rad);
     }
 }
 
-static Matrix4 matrix4_rotate(f32 rad_x, f32 rad_y, f32 rad_z)
+static Matrix4 mat4_rotate(f32 rad_x, f32 rad_y, f32 rad_z)
 {
-    return matrix4_rotate(Vector3{rad_x, rad_y, rad_z});
+    return mat4_rotate(Vec3{rad_x, rad_y, rad_z});
 }
 
 namespace detail
 {
     // note for future: http://perry.cz/articles/ProjectionMatrix.xhtml
-    static Matrix4 matrix4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+    static Matrix4 mat4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
     {
         f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
 
@@ -515,7 +515,7 @@ namespace detail
             0, 0, 1.f, 0.f);
     }
 
-    static Matrix4 matrix4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+    static Matrix4 mat4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
     {
         f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
         f32 k = far_z / (far_z - near_z);
@@ -528,15 +528,15 @@ namespace detail
     }
 }
 
-static Matrix4 matrix4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+static Matrix4 mat4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
 {
     if constexpr (left_handed)
     {
-        return detail::matrix4_perspective_LH(vertical_fov_rad, aspect_ratio, near_z, far_z);
+        return detail::mat4_perspective_LH(vertical_fov_rad, aspect_ratio, near_z, far_z);
     }
     else
     {
-        return detail::matrix4_perspective_RH(vertical_fov_rad, aspect_ratio, near_z, far_z);
+        return detail::mat4_perspective_RH(vertical_fov_rad, aspect_ratio, near_z, far_z);
     }
 }
 
@@ -558,13 +558,13 @@ static Matrix4 transpose(Matrix4 const& m)
 
 namespace detail
 {
-    static Matrix4 matrix4_look_to_lh(Vector3 eye_pos, Vector3 eye_dir, Vector3 up)
+    static Matrix4 mat4_look_to_lh(Vec3 eye_pos, Vec3 eye_dir, Vec3 up)
     {
-        Vector3 R2 = normalized(eye_dir);
-        Vector3 R0 = normalized(cross(up, R2));
-        Vector3 R1 = cross(R2, R0);
+        Vec3 R2 = normalized(eye_dir);
+        Vec3 R0 = normalized(cross(up, R2));
+        Vec3 R1 = cross(R2, R0);
 
-        Vector3 NegEyePosition = negate(eye_pos);
+        Vec3 NegEyePosition = negate(eye_pos);
         f32 D0 = dot(R0, NegEyePosition);
         f32 D1 = dot(R1, NegEyePosition);
         f32 D2 = dot(R2, NegEyePosition);
@@ -578,27 +578,27 @@ namespace detail
         return m;
     }
 
-    static Matrix4 matrix4_look_at_lh(Vector3 cameraPos, Vector3 target, Vector3 up)
+    static Matrix4 mat4_look_at_lh(Vec3 cameraPos, Vec3 target, Vec3 up)
     {
-        Vector3 eye_dir = vec3_sub(target, cameraPos);
-        return matrix4_look_to_lh(cameraPos, eye_dir, up);
+        Vec3 eye_dir = vec3_sub(target, cameraPos);
+        return mat4_look_to_lh(cameraPos, eye_dir, up);
     }
 
-    static Matrix4 matrix4_look_at_rh(Vector3 cameraPos, Vector3 target, Vector3 up)
+    static Matrix4 mat4_look_at_rh(Vec3 cameraPos, Vec3 target, Vec3 up)
     {
-        Vector3 neg_eye_dir = vec3_sub(cameraPos, target);
-        return matrix4_look_to_lh(cameraPos, neg_eye_dir, up);
+        Vec3 neg_eye_dir = vec3_sub(cameraPos, target);
+        return mat4_look_to_lh(cameraPos, neg_eye_dir, up);
     }
 }
 
-static Matrix4 matrix4_look_at(Vector3 cameraPos, Vector3 target, Vector3 up)
+static Matrix4 mat4_look_at(Vec3 cameraPos, Vec3 target, Vec3 up)
 {
     if constexpr (left_handed)
     {
-        return detail::matrix4_look_at_lh(cameraPos, target, up);
+        return detail::mat4_look_at_lh(cameraPos, target, up);
     }
     else
     {
-        return detail::matrix4_look_at_rh(cameraPos, target, up);
+        return detail::mat4_look_at_rh(cameraPos, target, up);
     }
 }

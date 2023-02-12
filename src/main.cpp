@@ -476,12 +476,12 @@ static VkRenderPass create_vk_fullframe_renderpass(VkDevice vk_device, VkFormat 
     return vk_render_pass;
 }
 
-void print_row(Matrix4 const& m, u32 row)
+void print_row(Mat4 const& m, u32 row)
 {
     LOG("% 03.3f % 03.3f % 03.3f % 03.3f", m(row,0), m(row,1), m(row,2), m(row,3));
 }
 
-void print_matrix(Matrix4 const& m)
+void print_matrix(Mat4 const& m)
 {
     print_row(m, 0);
     print_row(m, 1);
@@ -969,7 +969,7 @@ int main(int argc, char** argv)
         VkPushConstantRange push_constants;
         push_constants.offset = 0;
         // push_constants.size = sizeof(glm::mat4);
-        push_constants.size = sizeof(Matrix4);
+        push_constants.size = sizeof(Mat4);
         push_constants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
         VkPipelineLayoutCreateInfo create_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -1310,13 +1310,13 @@ int main(int argc, char** argv)
             };
         }
 
-        Matrix4 view = mat4_look_at(cam_pos, vec3_zero(), Vec3{0.f, 1.f, 0.f});
+        Mat4 view = mat4_look_at(cam_pos, vec3_zero(), Vec3{0.f, 1.f, 0.f});
         
-        Matrix4 projection = mat4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
-        Matrix4 model = mat4_identity();
-        Matrix4 mesh_matrix = mat4_mul(projection, mat4_mul(view, model));
+        Mat4 projection = mat4_perspective(degree_to_rad(70.f), f32(surface_width) / f32(surface_height), 0.1f, 200.f);
+        Mat4 model = mat4_identity();
+        Mat4 mesh_matrix = mat4_mul(projection, mat4_mul(view, model));
 
-        vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Matrix4), mesh_matrix.m);
+        vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), mesh_matrix.m);
         vkCmdDrawIndexed(frame_cmds, ARRAYSIZE(indices), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(frame_cmds);

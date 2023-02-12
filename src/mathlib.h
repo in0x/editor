@@ -292,7 +292,7 @@ struct Vec4
 // We use column major convention.
 // https://fgiesen.wordpress.com/2012/02/12/row-major-vs-column-major-row-vectors-vs-column-vectors/
 
-struct Matrix4
+struct Mat4
 {
     union
     {
@@ -306,9 +306,9 @@ struct Matrix4
         };
     };
 
-    Matrix4() = default;
+    Mat4() = default;
 
-    Matrix4(f32 m00, f32 m01, f32 m02, f32 m03,
+    Mat4(f32 m00, f32 m01, f32 m02, f32 m03,
             f32 m10, f32 m11, f32 m12, f32 m13,
             f32 m20, f32 m21, f32 m22, f32 m23,
             f32 m30, f32 m31, f32 m32, f32 m33)
@@ -345,9 +345,9 @@ struct Matrix4
     }
 };
 
-static Matrix4 mat4_zero()
+static Mat4 mat4_zero()
 {
-    return Matrix4(
+    return Mat4(
         0.f, 0.f, 0.f, 0.f,
         0.f, 0.f, 0.f, 0.f,
         0.f, 0.f, 0.f, 0.f,
@@ -355,9 +355,9 @@ static Matrix4 mat4_zero()
     );
 }
 
-static Matrix4 mat4_identity()
+static Mat4 mat4_identity()
 {
-    return Matrix4(
+    return Mat4(
         1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
         0.f, 0.f, 1.f, 0.f,
@@ -365,7 +365,7 @@ static Matrix4 mat4_identity()
     );
 }
 
-static bool mat4_eq(Matrix4 const& lhs, Matrix4 const& rhs)
+static bool mat4_eq(Mat4 const& lhs, Mat4 const& rhs)
 {
     for (u32 row = 0; row < 4; ++row)
     {
@@ -377,9 +377,9 @@ static bool mat4_eq(Matrix4 const& lhs, Matrix4 const& rhs)
     return true;
 }
 
-static Matrix4 mat4_mul(Matrix4 const& lhs, Matrix4 const& rhs)
+static Mat4 mat4_mul(Mat4 const& lhs, Mat4 const& rhs)
 {
-    Matrix4 result = mat4_zero();
+    Mat4 result = mat4_zero();
 
     for (u32 row = 0; row < 4; ++row)
     {
@@ -396,7 +396,7 @@ static Matrix4 mat4_mul(Matrix4 const& lhs, Matrix4 const& rhs)
     return result;
 }
 
-static Vec4 mat4_mul(Matrix4 const& m, Vec4 v)
+static Vec4 mat4_mul(Mat4 const& m, Vec4 v)
 {
     Vec4 out;
     for (int i = 0; i < 4; ++i)
@@ -408,22 +408,22 @@ static Vec4 mat4_mul(Matrix4 const& m, Vec4 v)
 
 static void test_mat4_mul()
 {
-    Matrix4 lhs(
+    Mat4 lhs(
         1.f, 8.f, 4.f, 5.f,
         6.f, 2.f, 1.f, 7.f,
         3.f, 9.f, 9.f, 2.f,
         8.f, 6.f, 4.f, 5.f
     );
 
-    Matrix4 rhs(
+    Mat4 rhs(
         8.f, 2.f, 9.f, 2.f,
         3.f, 5.f, 4.f, 1.f,
         7.f, 6.f, 3.f, 2.f,
         9.f, 8.f, 5.f, 7.f
     );
 
-    Matrix4 l_to_r = mat4_mul(lhs, rhs);
-    Matrix4 l_to_r_expected(
+    Mat4 l_to_r = mat4_mul(lhs, rhs);
+    Mat4 l_to_r_expected(
         105.f, 106.f, 78.f, 53.f,
         124.f, 84.f, 100.f, 65.f,
         132.f, 121.f, 100.f, 47.f,
@@ -432,8 +432,8 @@ static void test_mat4_mul()
 
     ASSERT(mat4_eq(l_to_r_expected, l_to_r));
 
-    Matrix4 r_to_l = mat4_mul(rhs, lhs);
-    Matrix4 r_to_l_expected(
+    Mat4 r_to_l = mat4_mul(rhs, lhs);
+    Mat4 r_to_l_expected(
         63.f, 161.f, 123.f, 82.f,
         53.f, 76.f, 57.f, 63.f,
         68.f, 107.f, 69.f, 93.f,
@@ -443,23 +443,23 @@ static void test_mat4_mul()
     ASSERT(mat4_eq(r_to_l_expected, r_to_l));
 }
 
-static Matrix4 mat4_translate(Vec3 translation)
+static Mat4 mat4_translate(Vec3 translation)
 {
-    Matrix4 result = mat4_identity();
+    Mat4 result = mat4_identity();
     result.m03 = translation.x;
     result.m13 = translation.y;
     result.m23 = translation.z;
     return result;
 }
 
-static Matrix4 mat4_translate(f32 x, f32 y, f32 z)
+static Mat4 mat4_translate(f32 x, f32 y, f32 z)
 {
     return mat4_translate(Vec3{x, y, z});
 }
 
 namespace detail
 {
-    static Matrix4 mat4_rotate_LH(Vec3 angles_rad)
+    static Mat4 mat4_rotate_LH(Vec3 angles_rad)
     {
         f32 const A = cosf(angles_rad.x);
         f32 const B = sinf(angles_rad.x);
@@ -468,7 +468,7 @@ namespace detail
         f32 const E = cosf(angles_rad.z);
         f32 const F = sinf(angles_rad.z);
 
-        return Matrix4(
+        return Mat4(
             C * E,             -C * F,             -D,     0.0f,
             -B * D * E + A * F, B * D * F + A * E, -B * C, 0.0f,
             A * D * E + B * F, -A * D * F + B * E, A * C,  0.0f,
@@ -476,7 +476,7 @@ namespace detail
         );
     }
 
-    static Matrix4 mat4_rotate_RH(Vec3 angles_rad)
+    static Mat4 mat4_rotate_RH(Vec3 angles_rad)
     {
         Vec3 flipped_angles = angles_rad;
         flipped_angles.y *= -1;
@@ -484,7 +484,7 @@ namespace detail
     }
 }
 
-static Matrix4 mat4_rotate(Vec3 angles_rad)
+static Mat4 mat4_rotate(Vec3 angles_rad)
 {
     if constexpr (left_handed)
     {
@@ -496,7 +496,7 @@ static Matrix4 mat4_rotate(Vec3 angles_rad)
     }
 }
 
-static Matrix4 mat4_rotate(f32 rad_x, f32 rad_y, f32 rad_z)
+static Mat4 mat4_rotate(f32 rad_x, f32 rad_y, f32 rad_z)
 {
     return mat4_rotate(Vec3{rad_x, rad_y, rad_z});
 }
@@ -504,23 +504,23 @@ static Matrix4 mat4_rotate(f32 rad_x, f32 rad_y, f32 rad_z)
 namespace detail
 {
     // note for future: http://perry.cz/articles/ProjectionMatrix.xhtml
-    static Matrix4 mat4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+    static Mat4 mat4_perspective_LH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
     {
         f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
 
-        return Matrix4(
+        return Mat4(
             g / aspect_ratio, 0, 0, 0,
             0, g, 0, 0,
             0, 0, far_z / (far_z - near_z), -near_z * (far_z / (far_z - near_z)),
             0, 0, 1.f, 0.f);
     }
 
-    static Matrix4 mat4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+    static Mat4 mat4_perspective_RH(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
     {
         f32 g = 1.0f / tanf(vertical_fov_rad * 0.5f);
         f32 k = far_z / (far_z - near_z);
 
-        return Matrix4(
+        return Mat4(
             g / aspect_ratio, 0, 0, 0,
             0, -g, 0, 0,
             0, 0, k, -near_z * k,
@@ -528,7 +528,7 @@ namespace detail
     }
 }
 
-static Matrix4 mat4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
+static Mat4 mat4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near_z, f32 far_z)
 {
     if constexpr (left_handed)
     {
@@ -540,9 +540,9 @@ static Matrix4 mat4_perspective(f32 vertical_fov_rad, f32 aspect_ratio, f32 near
     }
 }
 
-static Matrix4 transpose(Matrix4 const& m)
+static Mat4 transpose(Mat4 const& m)
 {
-    Matrix4 out = m;
+    Mat4 out = m;
 
     for (int i = 0; i < 4; i++)
     {
@@ -558,7 +558,7 @@ static Matrix4 transpose(Matrix4 const& m)
 
 namespace detail
 {
-    static Matrix4 mat4_look_to_lh(Vec3 eye_pos, Vec3 eye_dir, Vec3 up)
+    static Mat4 mat4_look_to_lh(Vec3 eye_pos, Vec3 eye_dir, Vec3 up)
     {
         Vec3 R2 = normalized(eye_dir);
         Vec3 R0 = normalized(cross(up, R2));
@@ -569,7 +569,7 @@ namespace detail
         f32 D1 = dot(R1, NegEyePosition);
         f32 D2 = dot(R2, NegEyePosition);
 
-        Matrix4 m(
+        Mat4 m(
             R0.x, R0.y, R0.z, D0,
             R1.x, R1.y, R1.z, D1,
             R2.x, R2.y, R2.z, D2,
@@ -578,20 +578,20 @@ namespace detail
         return m;
     }
 
-    static Matrix4 mat4_look_at_lh(Vec3 cameraPos, Vec3 target, Vec3 up)
+    static Mat4 mat4_look_at_lh(Vec3 cameraPos, Vec3 target, Vec3 up)
     {
         Vec3 eye_dir = vec3_sub(target, cameraPos);
         return mat4_look_to_lh(cameraPos, eye_dir, up);
     }
 
-    static Matrix4 mat4_look_at_rh(Vec3 cameraPos, Vec3 target, Vec3 up)
+    static Mat4 mat4_look_at_rh(Vec3 cameraPos, Vec3 target, Vec3 up)
     {
         Vec3 neg_eye_dir = vec3_sub(cameraPos, target);
         return mat4_look_to_lh(cameraPos, neg_eye_dir, up);
     }
 }
 
-static Matrix4 mat4_look_at(Vec3 cameraPos, Vec3 target, Vec3 up)
+static Mat4 mat4_look_at(Vec3 cameraPos, Vec3 target, Vec3 up)
 {
     if constexpr (left_handed)
     {

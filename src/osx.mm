@@ -318,7 +318,9 @@ static void update_window_dimensions(OSX_Window_Impl* window)
 
 - (void)scrollWheel:(NSEvent *)event
 {
-    LOG("Scrollwheel moved %f", event.scrollingDeltaY);
+    pthread_mutex_lock(&app->input_critsec);
+    app->input_state[app->input_idx].scroll_wheel = event.scrollingDeltaY;
+    pthread_mutex_unlock(&app->input_critsec);
 }
 
 enum OSX_Mod_Mask

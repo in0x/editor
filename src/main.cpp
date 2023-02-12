@@ -1157,7 +1157,7 @@ int main(int argc, char** argv)
     Timer frame_timer = make_timer();
     s64 frame_count = 0;
 
-    Vector2 azimuth_zenith;
+    Vector3 azi_zen_zoom;
 
     f64 s_since_step = 0;
     f64 const step_len_s = 16.6 / 1000.0; // step physics at 60 hz
@@ -1254,12 +1254,13 @@ int main(int argc, char** argv)
         vkCmdBindIndexBuffer(frame_cmds, vbufs[Buffer_T::Idx].buffer, 0, VK_INDEX_TYPE_UINT16);
 
         // TODO zoom with mouse scroll
+        // TODO flip the other axis when they rotation flips over
         s_since_step += dt_s;
-        Vector2 prev_azi_zen;
+        Vector3 prev_azi_zen;
         while (s_since_step >= step_len_s)
         {
             // https://www.mbsoftworks.sk/tutorials/opengl4/026-camera-pt3-orbit-camera/
-            prev_azi_zen = azimuth_zenith;
+            prev_azi_zen = azi_zen_zoom;
 
             f32 rot_deg = degree_to_rad(0.1f) * step_len_s;
             f32 rot_y = 0.f;
@@ -1272,35 +1273,42 @@ int main(int argc, char** argv)
             if (rot_y != 0)
             {
                 f32 full_circle = 2.f * Pi;
-                azimuth_zenith.x += rot_y;
-                azimuth_zenith.x = fmodf(azimuth_zenith.x, full_circle); // Prevent the value growing above 360 deg
-                if (azimuth_zenith.x < 0.f)
-                    azimuth_zenith.x = full_circle + azimuth_zenith.x; // Clamp negative values 0 < x < 360
+                azi_zen_zoom.x += rot_y;
+                azi_zen_zoom.x = fmodf(azi_zen_zoom.x, full_circle); // Prevent the value growing above 360 deg
+                if (azi_zen_zoom.x < 0.f)
+                    azi_zen_zoom.x = full_circle + azi_zen_zoom.x; // Clamp negative values 0 < x < 360
             }
 
             if (rot_x != 0)
             {
                 // Stop rotation at slightly below 45 degrees to prevent becoming colinear with cardinal axis
                 f32 quarter_circle = Pi / 2.0f - 0.001f;
-                azimuth_zenith.y += rot_x;
-                azimuth_zenith.y = clamp(azimuth_zenith.y, -quarter_circle, quarter_circle);
+                azi_zen_zoom.y += rot_x;
+                azi_zen_zoom.y = clamp(azi_zen_zoom.y, -quarter_circle, quarter_circle);
+            }
+
+            if (input_state->scroll_wheel)
+            {
+                f32 sign = input_state->scroll_wheel > 0.f ? 1.f : -1.f;
+                f32 zoom = sign * 0.005f * step_len_s;
+                azi_zen_zoom.z += zoom;
             }
 
             s_since_step -= step_len_s;
         }
-        azimuth_zenith = lerp(azimuth_zenith, prev_azi_zen, s_since_step / step_len_s);
+        azi_zen_zoom = lerp(azi_zen_zoom, prev_azi_zen, s_since_step / step_len_s);
+        azi_zen_zoom.z = clamp(azi_zen_zoom.z, 2.f, 10.f);
 
         Vector3 cam_pos;
         {
-            f32 sin_azi = sinf(azimuth_zenith.x);
-            f32 cos_azi = cosf(azimuth_zenith.x);
-            f32 sin_zen = sinf(azimuth_zenith.y);
-            f32 cos_zen = cosf(azimuth_zenith.y);
-            f32 offset = 2.f;
+            f32 sin_azi = sinf(azi_zen_zoom.x);
+            f32 cos_azi = cosf(azi_zen_zoom.x);
+            f32 sin_zen = sinf(azi_zen_zoom.y);
+            f32 cos_zen = cosf(azi_zen_zoom.y);
             cam_pos = {
-                offset * cos_zen * cos_azi,
-                offset * sin_zen,
-                offset * cos_zen * sin_azi,
+                azi_zen_zoom.z * cos_zen * cos_azi,
+                azi_zen_zoom.z * sin_zen,
+                azi_zen_zoom.z * cos_zen * sin_azi,
             };
         }
 

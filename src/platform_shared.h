@@ -39,4 +39,5 @@ enum Input_Key_Code
 struct Input_State
 {
     bool key_down[Input_Key_Code::Enum_Count];
+    f32 scroll_wheel = 0.f;
 };

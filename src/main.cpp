@@ -732,7 +732,7 @@ void destroy_depth_buffer(VkDevice vk_device, Depth_Buffer db)
     vkDestroyImageView(vk_device, db.view, nullptr);
 }
 
-struct Upload_Context
+struct Upload_Ctx
 {
     VkCommandPool cmd_pool = VK_NULL_HANDLE;
     VkCommandBuffer cmd_buffer = VK_NULL_HANDLE;
@@ -744,9 +744,9 @@ struct Buffer_Upload
     VkEvent upload_finished = VK_NULL_HANDLE;
 };
 
-static Upload_Context create_upload_context(VkDevice vk_device, u32 gfx_family_idx)
+static Upload_Ctx create_upload_context(VkDevice vk_device, u32 gfx_family_idx)
 {
-    Upload_Context result;
+    Upload_Ctx result;
 
     VkCommandPoolCreateInfo cpai = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -767,30 +767,30 @@ static Upload_Context create_upload_context(VkDevice vk_device, u32 gfx_family_i
     return result;
 };
 
-static void destroy_upload_context(VkDevice vk_device, Upload_Context ctx)
+static void destroy_upload_context(VkDevice vk_device, Upload_Ctx ctx)
 {
     vkDestroyCommandPool(vk_device, ctx.cmd_pool, nullptr);    
 }
 
 static Buffer_Upload upload_to_buffer(VkDevice vk_device, VkPhysicalDevice vk_phys_device, 
-    Upload_Context upload_ctx, GPU_Buffer dst_buffer, void* src, u64 cnt)
+    Upload_Ctx upload_ctx, GPU_Buffer dst_buffer, void* src, u64 num_bytes)
 {
     Buffer_Upload result;
     result.staging_buffer = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-        .size  = cnt,
+        .size  = num_bytes,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .props =  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
     });
 
     void* dst = nullptr;
-    vkMapMemory(vk_device, result.staging_buffer.memory, 0, cnt, 0, &dst);
-    memcpy(dst, src, cnt);
+    vkMapMemory(vk_device, result.staging_buffer.memory, 0, num_bytes, 0, &dst);
+    memcpy(dst, src, num_bytes);
     vkUnmapMemory(vk_device, result.staging_buffer.memory);
 
     VkBufferCopy copy_region = {
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = cnt
+        .size = num_bytes
     };
     vkCmdCopyBuffer(upload_ctx.cmd_buffer, result.staging_buffer.buffer, dst_buffer.buffer, 1, &copy_region);
     
@@ -807,6 +807,84 @@ static void release_upload_buffer(VkDevice vk_device, Buffer_Upload* buffer)
 
     vkDestroyEvent(vk_device, buffer->upload_finished, nullptr);
     destroy_gpu_buffer(vk_device, buffer->staging_buffer);
+}
+
+struct Model
+{
+    GPU_Buffer vertices;
+    GPU_Buffer colors;
+    GPU_Buffer indices;
+    int num_vertices = 0;
+    int num_colors   = 0;
+    int num_indices  = 0;
+};
+
+struct Model_Upload
+{
+    Model model;
+    Buffer_Upload vert_upload;
+    Buffer_Upload col_upload;
+    Buffer_Upload idx_upload;
+};
+
+
+struct Vk_Ctx
+{
+    VkPhysicalDevice phys_device = VK_NULL_HANDLE;
+    VkDevice device              = VK_NULL_HANDLE;
+    Upload_Ctx upload_ctx;
+};
+
+Model_Upload create_model(Vk_Ctx const* vk_ctx, Slice<Vec3> vertices, Slice<Vec3> colors, Slice<u16> indices)
+{
+    Model_Upload result;
+
+    result.model.vertices = create_gpu_buffer(vk_ctx->device, vk_ctx->phys_device, GPU_Buffer_Params {
+        .size = vertices.count * sizeof(Vec3), 
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+        .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    });
+    result.model.num_vertices = vertices.count;
+
+    result.model.colors = create_gpu_buffer(vk_ctx->device, vk_ctx->phys_device, GPU_Buffer_Params {
+        .size = colors.count * sizeof(Vec3), 
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+        .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    });
+    result.model.num_colors = colors.count;
+
+    result.model.indices = create_gpu_buffer(vk_ctx->device, vk_ctx->phys_device, GPU_Buffer_Params {
+        .size = indices.count * sizeof(u16),
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    });
+    result.model.num_indices = indices.count;
+
+    result.vert_upload = upload_to_buffer(vk_ctx->device, vk_ctx->phys_device, 
+        vk_ctx->upload_ctx, result.model.vertices, (void*)vertices.array, vertices.count * sizeof(Vec3));
+
+    result.col_upload = upload_to_buffer(vk_ctx->device, vk_ctx->phys_device, 
+        vk_ctx->upload_ctx, result.model.colors, (void*)colors.array, colors.count * sizeof(Vec3));
+
+    result.idx_upload = upload_to_buffer(vk_ctx->device, vk_ctx->phys_device,
+        vk_ctx->upload_ctx, result.model.indices, (void*)indices.array, indices.count * sizeof(u16));
+
+    return result;
+}
+
+void destroy_model(Vk_Ctx const* vk_ctx, Model* model)
+{
+    destroy_gpu_buffer(vk_ctx->device, model->vertices);
+    destroy_gpu_buffer(vk_ctx->device, model->colors);
+    destroy_gpu_buffer(vk_ctx->device, model->indices);
+    zero_struct(model);
+}
+
+void finish_model_creation(Vk_Ctx const* vk_ctx, Model_Upload* upload)
+{
+    release_upload_buffer(vk_ctx->device, &upload->vert_upload);
+    release_upload_buffer(vk_ctx->device, &upload->col_upload);
+    release_upload_buffer(vk_ctx->device, &upload->idx_upload);
 }
 
 #if PLATFORM_WIN32
@@ -847,6 +925,8 @@ int main(int argc, char** argv)
 
     VK_CHECK(volkInitialize());
 
+    Vk_Ctx vk_ctx;
+
     VkInstance vk_instance = create_vk_instance();
     volkLoadInstanceOnly(vk_instance);
 
@@ -869,11 +949,13 @@ int main(int argc, char** argv)
     char const* phys_device_exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     Array<char const*> phys_device_ext_slice{&phys_device_exts, 1};
     VkPhysicalDevice vk_phys_device = create_vk_physical_device(vk_instance, vk_surface, phys_device_ext_slice, ctx);
+    vk_ctx.phys_device = vk_phys_device;
 
     u32 const gfx_family_idx = get_queue_family_index(vk_phys_device, ctx, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
     ASSERT(gfx_family_idx != VK_QUEUE_FAMILY_IGNORED);
 
     VkDevice vk_device = create_vk_device(vk_instance, vk_phys_device, gfx_family_idx);
+    vk_ctx.device = vk_device;
     volkLoadDevice(vk_device);
 
     VkQueue gfx_queue = VK_NULL_HANDLE;
@@ -980,9 +1062,6 @@ int main(int argc, char** argv)
     }
 
     enum Buffer_T { Pos = 0, Col, Idx, Count, Vert_T_Cnt = 2 };
-    Vec3 const (&vertices) [ARRAYSIZE(Cube_Geo::vertices)] = Cube_Geo::vertices;
-    Vec3 const (&colors) [ARRAYSIZE(Cube_Geo::colors)] = Cube_Geo::colors;
-    u16 const (&indices) [ARRAYSIZE(Cube_Geo::indices)] = Cube_Geo::indices;
     VkPipeline triangle_pipeline = VK_NULL_HANDLE;
     {
         // TODO(): Automate with shader reflection
@@ -1101,57 +1180,46 @@ int main(int argc, char** argv)
         VK_CHECK(vkAllocateCommandBuffers(vk_device, &allocate_info, &vk_cmd_buffers[0]));
     }
 
-    Upload_Context upload_ctx = create_upload_context(vk_device, gfx_family_idx);
+    vk_ctx.upload_ctx = create_upload_context(vk_device, gfx_family_idx);
 
-    GPU_Buffer vbufs[Buffer_T::Count];
+    Model cube_model;
+    Model cube_model_2;
     {
         VkCommandBufferBeginInfo begin_info = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
         };
-        VK_CHECK(vkBeginCommandBuffer(upload_ctx.cmd_buffer, &begin_info));
+
+        VK_CHECK(vkBeginCommandBuffer(vk_ctx.upload_ctx.cmd_buffer, &begin_info));
             
-        vbufs[Buffer_T::Pos] = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-            .size = sizeof(vertices), 
-            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-            .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        });
+        Model_Upload model_upload = create_model(
+            &vk_ctx,
+            Slice<Vec3> { Cube_Geo::vertices },
+            Slice<Vec3> { Cube_Geo::colors },
+            Slice<u16>  { Cube_Geo::indices }
+        );
+        cube_model = model_upload.model;
 
-        vbufs[Buffer_T::Col] = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-            .size = sizeof(vertices), 
-            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-            .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        });
+        Model_Upload model_upload_2 = create_model(
+            &vk_ctx,
+            Slice<Vec3> { Cube_Geo::vertices },
+            Slice<Vec3> { Cube_Geo::colors },
+            Slice<u16>  { Cube_Geo::indices }
+        );
+        cube_model_2 = model_upload_2.model;
 
-        vbufs[Buffer_T::Idx] = create_gpu_buffer(vk_device, vk_phys_device, GPU_Buffer_Params {
-            .size = sizeof(indices),
-            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            .props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        });
-
-        Buffer_Upload vert_upload = upload_to_buffer(vk_device, vk_phys_device, 
-            upload_ctx, vbufs[Buffer_T::Pos], (void*)&vertices, sizeof(vertices));
-
-        Buffer_Upload col_upload = upload_to_buffer(vk_device, vk_phys_device, 
-            upload_ctx, vbufs[Buffer_T::Col], (void*)&colors, sizeof(colors));
-
-        Buffer_Upload idx_upload = upload_to_buffer(vk_device, vk_phys_device,
-            upload_ctx, vbufs[Buffer_T::Idx], (void*)&indices, sizeof(indices));
-
-        vkEndCommandBuffer(upload_ctx.cmd_buffer);
+        vkEndCommandBuffer(vk_ctx.upload_ctx.cmd_buffer);
 
         VkSubmitInfo sbi = {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .commandBufferCount = 1,
-            .pCommandBuffers = &upload_ctx.cmd_buffer
+            .pCommandBuffers = &vk_ctx.upload_ctx.cmd_buffer
         };
 
         vkQueueSubmit(gfx_queue, 1, &sbi, VK_NULL_HANDLE);
         vkQueueWaitIdle(gfx_queue);
-
-        release_upload_buffer(vk_device, &vert_upload);
-        release_upload_buffer(vk_device, &col_upload);
-        release_upload_buffer(vk_device, &idx_upload);
+        finish_model_creation(&vk_ctx, &model_upload);
+        finish_model_creation(&vk_ctx, &model_upload_2);
     }
     
     Timer frame_timer = make_timer();
@@ -1247,11 +1315,6 @@ int main(int argc, char** argv)
         vkCmdSetScissor(frame_cmds, 0, 1, &scissor);
 
         vkCmdBindPipeline(frame_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline);
-        
-        VkDeviceSize buf_offsets[] = {0, 0};
-        VkBuffer vert_bufs[] = { vbufs[Buffer_T::Pos].buffer, vbufs[Buffer_T::Col].buffer };
-        vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
-        vkCmdBindIndexBuffer(frame_cmds, vbufs[Buffer_T::Idx].buffer, 0, VK_INDEX_TYPE_UINT16);
 
         s_since_step += dt_s;
         Vec3 prev_azi_zen;
@@ -1316,8 +1379,23 @@ int main(int argc, char** argv)
         Mat4 model = mat4_identity();
         Mat4 mesh_matrix = mat4_mul(projection, mat4_mul(view, model));
 
+        VkDeviceSize buf_offsets[] = {0, 0};
+        VkBuffer vert_bufs[] = { cube_model.vertices.buffer, cube_model.colors.buffer };
+        vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
+        vkCmdBindIndexBuffer(frame_cmds, cube_model.indices.buffer, 0, VK_INDEX_TYPE_UINT16);
         vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), mesh_matrix.m);
-        vkCmdDrawIndexed(frame_cmds, ARRAYSIZE(indices), 1, 0, 0, 0);
+        vkCmdDrawIndexed(frame_cmds, cube_model.num_indices, 1, 0, 0, 0);
+
+        model = mat4_translate(Vec3{0.f, 0.f, 2.f});
+        mesh_matrix = mat4_mul(projection, mat4_mul(view, model));
+
+        vert_bufs[0] = cube_model_2.vertices.buffer;
+        vert_bufs[1] = cube_model_2.colors.buffer;
+        vkCmdBindVertexBuffers(frame_cmds, 0, 2, vert_bufs, buf_offsets);
+        vkCmdBindIndexBuffer(frame_cmds, cube_model_2.indices.buffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdPushConstants(frame_cmds, triangle_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), mesh_matrix.m);
+        vkCmdDrawIndexed(frame_cmds, cube_model_2.num_indices, 1, 0, 0, 0);
+
 
         vkCmdEndRenderPass(frame_cmds);
 
@@ -1439,12 +1517,10 @@ int main(int argc, char** argv)
 
     vkDestroyRenderPass(vk_device, vk_render_pass, nullptr);
     vkDestroyCommandPool(vk_device, gfx_cmd_pool, nullptr); // destroying the command pool also destroys its commandbuffers.
-    for (s32 i = 0; i < Buffer_T::Count; ++i)
-    {
-        destroy_gpu_buffer(vk_device, vbufs[i]);
-    }
+    
+    destroy_model(&vk_ctx, &cube_model);
 
-    destroy_upload_context(vk_device, upload_ctx);
+    destroy_upload_context(vk_device, vk_ctx.upload_ctx);
 
     destroy_depth_buffer(vk_device, depth_buffer);
 

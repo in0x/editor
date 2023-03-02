@@ -59,6 +59,38 @@ struct Array
     operator bool() const { return is_valid(); }
 };
 
+template <typename T>
+struct Slice
+{
+    T const* array = nullptr;
+    s64 count = 0;
+
+    Slice() = default;
+
+    template<s64 src_count>
+    Slice(const T (&src)[src_count])
+    {
+        this->count = src_count;
+        this->array = src;
+    }
+
+    T const& operator[](s64 idx) const
+    {
+        ASSERT(idx < count);
+        return array[idx];
+    }
+
+    T const* begin() const
+    {
+        return array;
+    }
+
+    T const* end() const
+    {
+        return array + count;
+    }
+};
+
 template <typename T, s64 len>
 struct FixedArray : public Array<T>
 {
